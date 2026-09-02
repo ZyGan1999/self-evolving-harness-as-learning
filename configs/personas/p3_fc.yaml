@@ -1,0 +1,28 @@
+# P3: the Q1-redesign persona (FunctionCallAgent actuator).
+#
+# Changes vs p2_mixed, all forced by the 2026-07-14/16 calibration + pilots:
+#  - file_kebab_case dropped: its only trigger task family instructs snake_case, so the
+#    preference and the task instruction contradict each other (never measurable)
+#  - recent_mode_card dropped: unmeasurable without a card-payment stream, and its field
+#    claim (venmo.payment_card) is now held by usual_card
+#  - usual_card added: family B (statistical aggregation), out-of-support under the
+#    binary feedback tier; rescued by an external acceptance-rate counter
+#  - private_note_format kept with the whole-dollar parity fix (cents parity was
+#    constant-even on integer-dollar tasks, i.e. the rule was degenerate)
+#  - sms_checksum kept: family A (derived computation), out-of-support on the FC actuator
+#    (oracle compliance 0.67 vs 1.00 on the code agent — the actuator flip)
+#
+# Field claims are disjoint: phone.message_suffix (sms_checksum), venmo.note
+# (private_note_format), venmo.payment_card (usual_card), venmo.privacy (venmo_private),
+# spotify.playlist_privacy (playlist_private), spotify.like_vs_playlist (playlist_over_like).
+name: p3_fc
+description: >
+  In-support style rules plus the two surviving out-of-support families: derived
+  computation (family A) and statistical aggregation (family B).
+rules:
+  - venmo_private
+  - playlist_private
+  - playlist_over_like
+  - sms_checksum
+  - private_note_format
+  - usual_card

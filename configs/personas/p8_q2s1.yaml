@@ -1,0 +1,56 @@
+# P8 / scan set S1: the d=8 scan set for the R-arm L sweep.
+#
+# p6_q2 was d=5 but only ONE rule turned out measurable on the frozen eval split, because two
+# of its five (payment_note_category, payment_note_initials) sit at violation 1.00 at EVERY L
+# including the L where their own line enters the block. The cause is visible in the pool
+# without running anything: the arms inject the LEARNER's induced text, not oracle_text, and
+# for those two the induced line does not encode what the checker tests.
+#
+#   payment_note_category   induced "Payment refunds should include a category tag in the
+#                           transaction note"  vs checker: note must START with '[personal]'
+#   payment_note_initials   induced "Payment notes should include your initials suffix"
+#                           vs checker: must END with initials in ROUND BRACKETS, e.g. '(J.D.)'
+#
+# Following either line perfectly still fails. So the admission bar for S1 is induced-text
+# fidelity -- the screen's `learned` column -- not the `oracle` column p6_q2 was built on.
+#
+# Membership, with the evidence each rule was admitted on (inducibility_..._q2v2.json):
+#   sms_signoff              learned-faithful: "signed with your first name"; the one rule that
+#                            carried p6_q2's whole signal (viol 1.00 -> 0.02 at its entry)
+#   sms_greeting             base 1.00, induced text is vague about the exact 'Hi <Name>,' form;
+#                            on p6_q2's split it read 0.00 at every L because applicable was
+#                            near zero there, NOT because the line worked. Re-measured here on
+#                            a split that actually triggers it.
+#   sms_terse                UNSCREENED. Induced text comes from this collection.
+#   payment_has_note         induced "should always include a description" -- faithful. Screen
+#                            said NO-HEADROOM only because base 0.50 < 0.60 on n=2 tasks, where
+#                            0.50 means one task of two; the bar is not informative at n=2.
+#   payment_note_lowercase   induced "notes should be all lowercase" -- faithful. Same n=2
+#                            caveat as above. Measured conflict dose +1.00 against
+#                            payment_note_initials, which is why that rule is NOT here.
+#   payment_note_single_word UNSCREENED. Induced text comes from this collection.
+#   venmo_private            induced "marked as private by default" -- faithful; fixed at its
+#                            entry in the p6_q2 sweep.
+#   playlist_over_like       admitted for TASK DIVERSITY: 12 trigger tasks across 4 families,
+#                            where every other candidate has 6 across 2. Screened UNMEASURED
+#                            but not truly vacuous (applicable 1 of 2, violated 1).
+#
+# Internal consistency: no pair collides in ConflictGraph, and the pairs the graph cannot see
+# were checked by hand against oracle_text, since the graph keys on field_claims and so judged
+# lowercase-vs-initials non-conflicting when the measured dose is +1.00. 'Hi Bob, ok Sam'
+# satisfies greeting + signoff + terse together; single_word implies has_note rather than
+# fighting it. payment_note_category and payment_note_no_brackets are excluded as they
+# contradict single_word (a bracketed tag is neither one word nor punctuation-free).
+name: p8_q2s1
+description: >
+  Eight preferences spanning phone, venmo and spotify, admitted on induced-text fidelity so
+  that a rule's own line entering the block can actually move it. d=8 for the R-arm L sweep.
+rules:
+  - sms_signoff
+  - sms_greeting
+  - sms_terse
+  - payment_has_note
+  - payment_note_lowercase
+  - payment_note_single_word
+  - venmo_private
+  - playlist_over_like

@@ -1,0 +1,34 @@
+# P7: the DILUTION donor. Not a persona to be evaluated -- a source of learner-written
+# assertions that are CORRECT but about preferences p6_q2's eval tasks never exercise.
+#
+# The D arm of the R/D/N design needs off-topic-but-correct lines. Hand-writing them would
+# make the arm a construction of mine rather than a property of the learner, so they are
+# collected the same way p6_q2's own lines were: run the learner on this persona, let it
+# induce assertions from instance-tier complaints, harvest the pool.
+#
+# Selection criterion for these five (measured 2026-08 against the 147-task train+dev pool):
+#   >= 3 tasks at difficulty <= 2 invoke a trigger API   -> the learner gets complaints at all
+#   ZERO of p6_q2's 6 eval task ids invoke one           -> the lines are inapplicable at eval,
+#                                                           so they dilute without colliding
+#
+# Rules excluded for failing the second bar, and why it matters: private_note_format,
+# venmo_public_feed and payment_note_single_word are triggered by 4 of the 6 eval tasks and
+# sms_terse by 2. Padding memory with those would recreate the cross-field collision of the
+# earlier interference result instead of measuring dilution -- the two mechanisms have to stay
+# separable. gmail / todoist / simple_note rules are triggered by 0 tasks (their create-class
+# APIs are never called in train+dev), so the learner can never be complained at about them.
+#
+# The apps are disjoint from p6_q2's (spotify, file_system vs phone, venmo), which is the
+# point: at eval these lines are about apps the task never opens.
+name: p7_offtopic
+description: >
+  Donor persona for the dilution arm. Five preferences over spotify and file_system, chosen
+  so that they are learnable from complaints on the train stream yet never applicable in
+  p6_q2's eval tasks. Its collected assertions are the off-topic-but-correct filler whose
+  share of memory grows with L.
+rules:
+  - playlist_private
+  - playlist_over_like
+  - file_kebab_case
+  - file_content_header
+  - file_overwrite_always

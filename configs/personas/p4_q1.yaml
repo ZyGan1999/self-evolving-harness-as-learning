@@ -1,0 +1,26 @@
+# P4: the Q1 main-experiment persona (FC actuator), one rule per class.
+#
+# Cut down from p3_fc by the 2026-07-20 calibration, which disqualified more rules than
+# it confirmed:
+#  - playlist_private, playlist_over_like dropped: empty-memory compliance 1.00, so the
+#    oracle arm proves nothing (haiku already does both by default)
+#  - sms_signoff dropped: its 0.00 FC baseline was a phantom -- an API-rejected
+#    message_body= attempt scored as an unsigned message. Real baseline is 1.00.
+#  - venmo_private dropped: oracle 0.75 is a border value that supports neither verdict
+#  - sms_checksum (word count) replaced by sms_char_checksum (character count): the word
+#    rung calibrates at 0.75, the character rung at 0.00, and only the latter is a clean
+#    out-of-support carrier. AppWorld task content could not supply this difficulty --
+#    all 9 SMS tasks emit 4-20 word messages -- so it lives in the rule.
+#  - usual_card runs in Exp1b instead: family B needs the synthetic habit stream, and its
+#    control component is an external counter rather than the verifier gate.
+#
+# Field claims stay disjoint: venmo.note (private_note_format),
+# phone.message_suffix (sms_char_checksum).
+name: p4_q1
+description: >
+  One in-support rule and one out-of-support rule, same actuator, same eval set:
+  private_note_format is satisfied from a perfect description alone, while
+  sms_char_checksum is not satisfiable from any description and needs a checker.
+rules:
+  - private_note_format
+  - sms_char_checksum

@@ -1,0 +1,38 @@
+# Credentials and local configuration
+.env
+.env.*
+!.env.example
+
+# Python environments and caches
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Downloaded benchmark data and generated experiment artifacts
+appworld_root/
+outputs/
+
+# Plotting code excluded from the source-only release
+scripts/plot_*.py
+scripts/paper_*.py
+
+# Internal experiment documentation
+docs/
+
+# Logs, archives, and local tooling
+*.log
+*.out
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+.DS_Store
+.idea/
+.vscode/
