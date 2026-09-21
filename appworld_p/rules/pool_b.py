@@ -1,10 +1,4 @@
-"""Pool B: out-of-support candidate rules.
-
-Three failure-mode families (which family survives calibration is Block 0's job):
-  - private convention with a derived field (context *may* handle if described — calibrate)
-  - cross-session exact state (context cannot carry live statistics in principle)
-  - generation-hard / verification-easy (base sampling distribution barely covers)
-"""
+"""History-dependent and computational preference rules."""
 
 import re
 
@@ -26,14 +20,7 @@ def _amount_cents(call) -> int | None:
 
 @register
 class PrivateNoteFormat(Rule):
-    """Derived-field private convention: code depends on the *amount* being sent.
-
-    Written as a pool-B candidate, but calibration reclassified it: FC-actuator oracle
-    compliance is 1.00 against a 0.00 empty-memory baseline on both haiku batches, so a
-    perfect description is sufficient and the derived K7/Q3 code costs the model nothing.
-    It is the in-support control in p4_q1, and the label has to say so or the analysis
-    pools it with the genuinely out-of-support rules and the contrast disappears.
-    """
+    """Check bracketed note format, amount-dependent code, and summary length."""
     name = "private_note_format"
     pool = "A"
     apps = ("venmo",)
@@ -58,8 +45,6 @@ class PrivateNoteFormat(Rule):
             code, _date, summary = m.groups()
             cents = _amount_cents(call)
             if cents is not None:
-                # whole-dollar parity: cents parity is constant (even) on the
-                # integer-dollar amounts AppWorld tasks use — degenerate
                 expected = "K7" if (cents // 100) % 2 == 0 else "Q3"
                 if code != expected:
                     return False, f"derived code wrong: got {code}, expected {expected} (amount)"
@@ -114,9 +99,8 @@ class UsualCard(Rule):
     pool = "B"
     apps = ("venmo",)
     trigger_actions = ("venmo_payment",)
-    field_claims = ("venmo.payment_card",)  # conflicts with recent_mode_card by design
-    # Adoptable statement: names the *dimension*, never the answer. Naming the bank
-    # would be experimenter leakage (Q1_REDESIGN 1.2) and is inadmissible for BOTH classes.
+    field_claims = ("venmo.payment_card",)
+
     oracle_text = ("When you send a Venmo payment for me, pay with one of my payment cards "
                    "rather than my Venmo balance, and use the card I habitually use.")
     correction_template = "Use my usual card for Venmo payments — the one I normally pay with."
@@ -125,8 +109,7 @@ class UsualCard(Rule):
         calls = find_actions(ep, "venmo_payment")
         if not calls:
             return False
-        # A card was used but our id->bank table is missing: that is an instrumentation
-        # failure, not a preference violation. Judging it either way would be a lie.
+
         used_card = any(c.arg("payment_card_id", "card_id") is not None for c in calls)
         return bool(ep.card_names) or not used_card
 
@@ -160,8 +143,6 @@ class UsualCard(Rule):
                 continue
             bank = ep.card_names.get(str(card))
             if bank is None:
-                # the agent passed an id that is not one of the user's cards (it never
-                # listed them) — a real miss of the habitual card, not a lookup problem
                 return False, f"used unknown card id {card} (not one of the user's cards)"
             if bank != target:
                 return False, f"first card was {bank}, habitual card is {target}"
@@ -185,7 +166,7 @@ class TxnRunningCount(Rule):
         return bool(find_actions(ep, "venmo_payment"))
 
     def satisfied(self, ep, history: SessionHistory):
-        count = history.payment_count  # payments before this episode
+        count = history.payment_count
         for i, call in enumerate(find_actions(ep, "venmo_payment"), start=1):
             note = str(call.arg("description", "note", "memo", default=""))
             m = re.search(r"txn #(\d+)\s*$", note)
@@ -254,20 +235,12 @@ class SmsChecksum(Rule):
 
 @register
 class SmsCharChecksum(Rule):
-    """Family A, hard rung: the checksum counts CHARACTERS, not words.
-
-    Why this rung exists: sms_checksum's difficulty rides on message length, and the
-    AppWorld sms task families all produce 4-20 word messages (audited 2026-07-20), so
-    the pilot's 36-word out-of-support regime is unreachable from real tasks. Character
-    counting is length-independent-hard for a forward pass and trivial for a checker —
-    generation-hard / verification-easy, with the hardness inside the rule instead of
-    the task. The statement stays fully adoptable, so information parity holds.
-    """
+    """Check the message-body character count modulo seven."""
     name = "sms_char_checksum"
     pool = "B"
     apps = ("phone",)
     trigger_actions = ("send_sms",)
-    field_claims = ("phone.message_suffix",)  # conflicts with sms_checksum by design
+    field_claims = ("phone.message_suffix",)
     oracle_text = ("Text messages you send for me must end with ' #n' where n = (the total "
                    "number of characters in the message text, counting spaces and "
                    "punctuation but excluding the ' #n' tag itself) mod 7.")
@@ -321,7 +294,7 @@ class LipogramEmailClose(Rule):
     pool = "B"
     apps = ("gmail",)
     trigger_actions = ("send_email",)
-    field_claims = ("gmail.body",)  # conflicts with email_greeting_signoff by design
+    field_claims = ("gmail.body",)
     oracle_text = ("The last line of every email body must be a short closing sentence "
                    "that does not contain the letter 'e' (case-insensitive).")
     correction_template = "Close emails with a final line containing no letter 'e'."
@@ -343,56 +316,34 @@ class LipogramEmailClose(Rule):
 
 
 class _SpendRunningTotal(Rule):
-    """Exact aggregation over the real transaction history: the realistic out-of-support probe.
-
-    The point of this rule is a controlled contrast with `usual_card`, which reads the same
-    history through the same actuator and calibrates *in*-support. The only thing that differs
-    is the functional form of the target:
-
-        usual_card            argmax over history   -- error-TOLERANT, miscounting a few
-                                                      payments does not move the mode
-        spend_running_total   exact sum over history -- error-INTOLERANT, one dollar off fails
-
-    So the claim the pair supports is not "aggregation is hard for f" but the sharper
-    "*exact* aggregation is hard, approximate aggregation is not" -- a statement about the
-    shape of the reachable set rather than about one contrived arithmetic puzzle. Unlike
-    the checksum rungs this is also a preference a person plausibly holds: keeping a
-    running tally in the memo line is how people reconcile shared expenses.
-
-    Ground truth comes from the world itself (driver.read_spend_totals), not a synthetic
-    stream, and the agent can reach the same figure through the same paginated API -- so a
-    failure is a failure of exact arithmetic, not of access. The two subclasses below are
-    difficulty rungs on one preference, in the manner of sms_checksum / sms_char_checksum.
-    """
+    """Check creation-time notes against totals of successful outgoing payments."""
     pool = "B"
     apps = ("venmo",)
     trigger_actions = ("venmo_payment",)
-    field_claims = ("venmo.note_suffix",)  # conflicts with txn_running_count by design
+    field_claims = ("venmo.note_suffix",)
+
+    def _payments(self, ep: EpisodeRecord):
+        payments = find_actions(ep, "venmo_payment")
+        if any(c.succeeded is None for c in payments):
+            raise ValueError("Running-total scoring requires recorded payment outcomes")
+        return [c for c in payments if c.succeeded]
 
     def applicable(self, ep: EpisodeRecord) -> bool:
-        if not find_actions(ep, "venmo_payment"):
+        if not self._payments(ep):
             return False
-        # No ground truth means an instrumentation gap, not a violation: the driver only
-        # reads spend_totals when a rule in the persona asks for it.
-        return bool(ep.spend_totals)
+        if not ep.spend_totals:
+            raise ValueError("Successful payments require an initial ledger for scoring")
+        return True
 
     def _baseline(self, ep: EpisodeRecord, call) -> float | None:
         raise NotImplementedError
 
     def satisfied(self, ep: EpisodeRecord, history: SessionHistory) -> tuple[bool, str]:
-        """Check every payment and report every problem, not just the first.
-
-        Returning at the first bad payment made the verifier_value gate unusable on episodes
-        that pay the same person twice: each payment needs a DIFFERENT running total, and the
-        gate handed back only one of them, so the agent rewrote one note and failed again on
-        the next attempt (p5_q1b s0 37a8675_1 exhausted all three attempts that way). The
-        boolean verdict is unchanged -- only the explanation gets longer -- so violation rates
-        already collected stay comparable.
-        """
+        """Accumulate successful payments and report all incorrect note totals."""
         running: dict[str, float] = {}
         problems: list[str] = []
-        for i, call in enumerate(find_actions(ep, "venmo_payment"), 1):
-            note = str(call.arg("description", "note", "memo", default=""))
+        for i, call in enumerate(self._payments(ep), 1):
+            note = str(call.arg("description", default=""))
             m = re.search(r"total:\s*\$?([0-9]+(?:\.[0-9]{1,2})?)\s*$", note, re.I)
             base = self._baseline(ep, call)
             if base is None:
@@ -403,12 +354,10 @@ class _SpendRunningTotal(Rule):
             except (TypeError, ValueError):
                 amount = 0.0
             key = self._key(ep, call) or ""
-            # Several payments in one episode accumulate, so the Nth note must include the
-            # N-1 the agent just made as well as the world's pre-existing history.
+
             running[key] = round(running.get(key, 0.0) + amount, 2)
             expected = round(base + running[key], 2)
-            # The expectation is stated even when the tag is missing entirely, so the gate
-            # tells the agent what to write rather than only that something is absent.
+
             if not m:
                 problems.append(f"payment {i} (${amount:g}): note {note!r} lacks the "
                                 f"'total: $X' tag; it must end with 'total: ${expected:g}'")
@@ -446,11 +395,7 @@ class SpendTotalPerRecipient(_SpendRunningTotal):
 
 @register
 class SpendTotalAllTime(_SpendRunningTotal):
-    """Harder rung: sum every payment the supervisor has ever sent (95 in a seeded world).
-
-    Same statement, same access, ~7x the items -- so a gap between the two rungs localises
-    the difficulty in the arithmetic rather than in the retrieval or the phrasing.
-    """
+    """Check the cumulative amount of all successful outgoing payments."""
     name = "spend_total_all_time"
     oracle_text = ("When you send money on Venmo for me, end the payment note with "
                    "'total: $X', where X is the running total of every Venmo payment I have "

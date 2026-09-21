@@ -1,22 +1,7 @@
-"""Exp 1B (Q1, family B = statistical aggregation): arm runner.
-
-The x-axis here is habit OBSERVATIONS, not AppWorld episodes: the habit stream is
-synthetic micro-rounds (appworld_p/habit.py), so log length sweeps for free and the
-only LLM cost is the frozen eval set. Every arm sees the identical stream; the arms
-differ only in the computation applied to it (information parity, Q1_REDESIGN 1.2):
-
-  baseline  empty memory                                  -> floor
-  oracle    adoptable rule statement (names the dimension,
-            never the bank)                               -> chance-level by design
-  fulllog   statement + the complete raw log              -> context-class upper bound
-                                                             (prediction: flat in n)
-  external  statement + acceptance-rate counter argmax    -> control class (~1.0)
-
-Usage:
-  python scripts/run_exp1b.py --llm anthropic:claude-haiku-4-5-20251001 \
-      --arms baseline oracle fulllog external --schedule 0 20 60 120 \
-      --dominant "American Express" [--tier binary] [--seed 0] [--tag _pilot]
-"""
+"""Run the Q1 habitual-card comparison.
+Context arms use no memory, a stated rule, or the full observation log.
+Control arms use an external statistic or rejection-guided retries.
+The schedule counts synthetic habit observations."""
 
 import argparse
 import json
@@ -35,8 +20,8 @@ ARMS = ("baseline", "oracle", "fulllog", "external", "gate")
 
 def arm_config(arm: str, run_name: str, persona_path: str,
                args: argparse.Namespace) -> SessionConfig:
-    # baseline/oracle carry no stream-dependent state: evaluating them once (at the
-    # largest n) is sufficient and saves episodes
+
+
     schedule = args.schedule if arm in ("fulllog", "external") else [args.schedule[-1]]
     base = dict(run_name=run_name, persona_path=persona_path, agent=args.agent,
                 llm=args.llm, seed=args.seed, max_steps=args.max_steps,
@@ -56,9 +41,8 @@ def arm_config(arm: str, run_name: str, persona_path: str,
         return SessionConfig(memory_mode="oracle", oracle_verbosity=1,
                              inject_stats=True, **base)
     if arm == "gate":
-        # reject-only control harness, run through the NON-LEAKING channel: this rule's ordinary
-        # detail names the habitual bank, so verifier_detail here would measure label-copying.
-        # Exclusions accumulate because each retry gets a fresh world and context.
+
+
         return SessionConfig(memory_mode="oracle", oracle_verbosity=1,
                              verifier_attempts=args.attempts, verifier_nonleaking=True,
                              verifier_accumulate=True, **base)

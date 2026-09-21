@@ -10,6 +10,7 @@ route template and merged into arguments.
 
 import json
 import re
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
@@ -25,6 +26,8 @@ class ApiCall:
     arguments: dict[str, Any] = field(default_factory=dict)
     method: str = ""
     url: str = ""
+    succeeded: bool | None = None
+    transaction_id: int | None = None
 
     def arg(self, *names: str, default: Any = None) -> Any:
         """First present argument among candidate names (API arg naming may vary)."""
@@ -35,7 +38,6 @@ class ApiCall:
 
 
 def _route_to_regex(path_template: str) -> re.Pattern:
-    # "/transactions/{transaction_id}/like" -> ^/transactions/(?P<transaction_id>[^/]+)/like$
     pattern = re.sub(r"\{(\w+)\}", r"(?P<\1>[^/]+)", path_template.rstrip("/") or "/")
     return re.compile(f"^{pattern}$")
 
@@ -47,7 +49,7 @@ def _load_route_table(app: str) -> list[tuple[str, str, re.Pattern]]:
     if not doc_path.exists():
         return []
     docs = json.loads(doc_path.read_text())
-    # standard docs: {api_name: {"path": ..., "method": ..., ...}} or a list of such dicts.
+
     table = []
     items = docs.items() if isinstance(docs, dict) else [(d.get("api_name", d.get("name", "")), d) for d in docs]
     for api_name, doc in items:
@@ -97,10 +99,7 @@ def resolve_call(record: dict[str, Any]) -> ApiCall:
     segments = url.lstrip("/").split("/", 1)
     app = segments[0] if segments else ""
     route = "/" + (segments[1] if len(segments) > 1 else "")
-    # api_docs paths INCLUDE the app prefix ('/phone/messages/text/{phone_number}'), so
-    # matching only the stripped remainder never resolved anything: every call carried
-    # api='' and the checkers silently ran on the url-substring fallback alone. Try the
-    # full url first, then the stripped route for any doc that omits the prefix.
+
     for candidate in (url.rstrip("/") or "/", route.rstrip("/") or "/"):
         for m, api_name, regex in _load_route_table(app):
             if m != method:
@@ -109,21 +108,52 @@ def resolve_call(record: dict[str, Any]) -> ApiCall:
             if match:
                 return ApiCall(app=app, api=api_name,
                                arguments={**match.groupdict(), **data},
-                               method=method, url=url)
-    return ApiCall(app=app, api="", arguments=data, method=method, url=url)
+                               method=method, url=url,
+                               succeeded=record.get("succeeded"),
+                               transaction_id=record.get("transaction_id"))
+    return ApiCall(app=app, api="", arguments=data, method=method, url=url,
+                   succeeded=record.get("succeeded"),
+                   transaction_id=record.get("transaction_id"))
+
+
+@contextmanager
+def track_payment_outcomes(requester):
+    """Attach actual Venmo execution outcomes to AppWorld's attempt log.
+
+    Keep failed attempts: habitual-card scoring intentionally uses the first
+    attempted card. Running-total scoring separately selects successful payments.
+    """
+    original = requester._request
+
+    def request(_app_name, _api_name, *args, **kwargs):
+        start = len(requester.request_tracker.requests)
+        response = None
+        try:
+            response = original(_app_name, _api_name, *args, **kwargs)
+            return response
+        finally:
+            if (_app_name, _api_name) == ("venmo", "create_transaction"):
+                payload = {}
+                if response is not None and response.status_code == 200:
+                    try:
+                        payload = response.json()
+                    except (ValueError, TypeError):
+                        pass
+                transaction_id = payload.get("transaction_id") if isinstance(payload, dict) else None
+                success = isinstance(transaction_id, int) and not isinstance(transaction_id, bool)
+                for record in requester.request_tracker.requests[start:]:
+                    record["succeeded"] = success
+                    record["transaction_id"] = transaction_id if success else None
+
+    requester._request = request
+    try:
+        yield
+    finally:
+        requester._request = original
 
 
 def load_api_calls(jsonl_path: str | Path, keep_rejected: bool = False) -> list[ApiCall]:
-    """Resolved calls, with API-rejected attempts dropped by default.
-
-    api_calls.jsonl logs every ATTEMPT, including ones the API refused. A constrained
-    function-call agent guesses parameter names, so rejects are common: in calib_famA3
-    the agent first tried send_text_message(message_body=...), got 'Validation error.
-    Reason: message: field required', then retried with message=... . Scoring the
-    rejected attempt invented a violation ("sms lacks checksum tag: ''") for a message
-    that was in fact sent with a tag -- and it did so for 2 of 6 episodes. A call missing
-    a required parameter cannot have taken effect, so it must not be scored.
-    """
+    """Load resolved API attempts, optionally excluding schema-invalid requests."""
     path = Path(jsonl_path)
     if not path.exists():
         return []

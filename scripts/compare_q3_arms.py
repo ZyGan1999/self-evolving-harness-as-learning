@@ -1,22 +1,4 @@
-"""Q3 four-arm comparison: one aggregation, used by both the doc table and the figure.
-
-Every number in docs/Q3.md 4.5.6 comes from here. It reads each run's episodes.jsonl and counts
-applicable/violated per checkpoint, rather than scraping the `checkpoint n=` lines out of the run
-logs -- a log line reflects whatever the driver printed at the time, and during this batch several
-arms were re-run after implementation fixes, so a log grep can silently mix a superseded run with a
-current one. Reading the session data means the table cannot drift from the artefacts on disk.
-
-The four arms and why each is here (see appworld_p/baseline_updaters.py for the full rationale):
-
-  ACE        fixed capacity (12 bullets) + targeted add/modify deltas       arXiv:2510.04618
-  TEPA       unbounded store + active set bounded by key + revocation       arXiv:2608.07429
-  TRACE      corrections compiled into enforced runtime gates              arXiv:2606.13174
-  Reflexion  append-only reflections in a hard FIFO window (W=3)           arXiv:2303.11366
-
-Usage:
-  python scripts/compare_q3_arms.py            # table to stdout
-  python scripts/compare_q3_arms.py --json      # machine-readable, for the figure
-"""
+"""Aggregate Q3 evaluation episodes by method, seed, and checkpoint."""
 from __future__ import annotations
 
 import argparse
@@ -35,19 +17,18 @@ PERSONA = "p13_mixed"
 SEEDS = (0, 1, 2)
 NS = [0, 6, 12, 18, 24]
 
-# The five p13_mixed preferences. Scored explicitly rather than "whatever the row carries", so a
-# persona edit cannot silently change what the table means.
+
 RULES = ("sms_greeting", "sms_signoff", "payment_note_category",
          "payment_note_initials", "venmo_private")
 
-# ACE predates the baseline batch and lives under the original q3_p13 tag; the rest are q3_p13bl.
+
 ARMS = {
     "ACE": f"q3_p13_{MODEL}_{PERSONA}_s{{s}}_selfevolve_ace",
     "TEPA": f"q3_p13bl_{MODEL}_{PERSONA}_s{{s}}_tepa",
     "TRACE": f"q3_p13bl_{MODEL}_{PERSONA}_s{{s}}_trace",
     "Reflexion": f"q3_p13bl_{MODEL}_{PERSONA}_s{{s}}_reflexion",
 }
-# Static references, single seed: they do not evolve, so n has no meaning beyond 0.
+
 REFS = {"none": f"q3_p13_{MODEL}_{PERSONA}_s0_none",
         "oracle": f"q3_p13_{MODEL}_{PERSONA}_s0_oracle"}
 
@@ -72,7 +53,7 @@ def counts(dirname: str) -> dict[int, list[int]] | None:
 
 
 def collect() -> dict:
-    out = {"arms": {}, "refs": {}}
+    out = {"arms": {}, "refs": {}, "diagnostics": {}}
     for arm, pattern in ARMS.items():
         out["arms"][arm] = {}
         for s in SEEDS:
@@ -86,6 +67,14 @@ def collect() -> dict:
         if c and 0 in c:
             a, v = c[0]
             out["refs"][label] = {"applicable": a, "violated": v, "rate": v / a}
+    for label, arm in [("Full rewrite", "selfevolve_rewrite"),
+                       ("Corrective", "external_corrective")]:
+        c = counts(f"q3_p13_{MODEL}_{PERSONA}_s0_{arm}")
+        if c:
+            n = max(c)
+            a, v = c[n]
+            out["diagnostics"][label] = {"checkpoint": n, "applicable": a,
+                                         "violated": v, "rate": v / a if a else None}
     return out
 
 
@@ -114,6 +103,12 @@ def main() -> None:
     print("-" * 76)
     for label, ref in data["refs"].items():
         print(f"{label:<14}{ref['rate']:>9.3f}   ({ref['violated']}/{ref['applicable']})")
+
+    for label, point in data["diagnostics"].items():
+        rate = point["rate"]
+        rendered = f"{rate:.3f}" if rate is not None else "--"
+        print(f"{label}: n={point['checkpoint']} "
+              f"{point['violated']}/{point['applicable']} = {rendered}")
 
 
 if __name__ == "__main__":

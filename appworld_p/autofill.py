@@ -1,22 +1,7 @@
-"""Write-time field autofill: the strongest control-class harness in the study.
+"""Fill running-total notes from a ledger of successful Venmo payments.
 
-The gate arms (`oracle_verifier`, `oracle_verifier_value`) leave the field in f's hands and only
-judge the result afterwards. On `spend_total_per_recipient` that is not enough, and the
-transcripts say why: the checker already hands back the whole expected sequence
-("payment 1 must be $846; payment 2 must be $937"), and the agent still writes $846 into both.
-It is not failing to compute the number -- it computed $846 correctly on the first attempt --
-it is failing to emit a *different* number per payment within one episode.
-
-So the mechanism that should fix it is not more information but a different action space: the
-agent writes the memo it wants, and the harness rewrites the `total: $X` tag at call time from a
-ledger it maintains itself. f never has to hold the running sum. This is the same move as the
-family-B frequency counter (state lives outside f) applied to a field instead of a choice, and
-it is what makes "the reachable set moves when the harness changes" a measurement rather than an
-inference: the preference, the actuator, the model, and the context are all held fixed.
-
-Scope note: this repairs only the aggregate the preference asks for. It does not decide whom to
-pay, how much, or whether to pay at all -- those stay with f, so a task the agent would have
-failed on its own is still failed here.
+The proposed amount is included in the note before execution, but is committed
+to the ledger only after the API returns a successful transaction.
 """
 from __future__ import annotations
 
@@ -81,25 +66,34 @@ class SpendTotalAutofill:
             amount = 0.0
 
         key = self._key(kwargs)
-        self.running[key] = round(self.running.get(key, 0.0) + amount, 2)
-        expected = round(self.baseline.get(key, 0.0) + self.running[key], 2)
+        expected = round(self.baseline.get(key, 0.0) + self.running.get(key, 0.0) + amount, 2)
 
-        note_arg = next((kw for kw in call.keywords
-                         if kw.arg in ("description", "note", "memo")), None)
-        original = str(kwargs.get(note_arg.arg)) if note_arg is not None else ""
-        # strip whatever tag f wrote (right or wrong) and append the ledger's figure. Appending
-        # without stripping would leave two tags and the rule reads the last one, which would
-        # score as a pass while the memo the recipient sees is still wrong.
+        source_field = next((name for name in ("description", "note", "memo")
+                             if name in kwargs), None)
+        original = str(kwargs.get(source_field) or "") if source_field else ""
+
         body = TOTAL_TAG.sub("", original).rstrip(" ;,|")
         repaired = f"{body} total: ${expected:g}".strip() if body else f"total: ${expected:g}"
-        if note_arg is None:
-            call.keywords.append(ast.keyword(arg="description",
-                                             value=ast.Constant(value=repaired)))
-        else:
-            note_arg.value = ast.Constant(value=repaired)
+
+        aliases_present = any(kw.arg in ("note", "memo") for kw in call.keywords)
+        call.keywords = [kw for kw in call.keywords
+                         if kw.arg not in ("description", "note", "memo")]
+        call.keywords.append(ast.keyword(arg="description",
+                                         value=ast.Constant(value=repaired)))
         rewritten = ast.unparse(ast.fix_missing_locations(call))
         record = {"before": original, "after": repaired, "expected": expected,
                   "recipient": key, "amount": amount,
-                  "changed": original.strip() != repaired.strip()}
+                  "source_field": source_field,
+                  "changed": (original.strip() != repaired.strip()
+                              or source_field != "description" or aliases_present)}
         self.repairs.append(record)
         return rewritten, record
+
+    def commit(self, repair: dict, succeeded: bool) -> None:
+        """Advance the ledger only after the payment API confirms success."""
+        if "succeeded" in repair:
+            raise ValueError("Payment outcome was already committed")
+        repair["succeeded"] = succeeded
+        if succeeded:
+            key = repair["recipient"]
+            self.running[key] = round(self.running.get(key, 0.0) + repair["amount"], 2)

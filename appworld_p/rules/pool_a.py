@@ -280,21 +280,6 @@ class PlaylistOverLike(Rule):
         return True, ""
 
 
-# ---------------------------------------------------------------- Q2 attribute slots
-#
-# Q2 needs several binary in-support preferences at once, and the five it could assemble from
-# the rules above turned out to carry only two with any room: payment_has_note (0.17 baseline
-# violation) and playlist_private (0.09) are already satisfied by default, so writing them
-# correctly cannot help and only a REVERSED assertion moves them. That flattens the descending
-# branch and leaves d=2 effectively.
-#
-# The constraint on new slots is that AppWorld task instructions dictate most user-visible
-# text: the playlist title is given as "Spotify Recommended Songs", the file path as
-# "~/backups/spotify.csv". A preference on a dictated field contradicts the instruction and
-# becomes unmeasurable -- that is exactly why file_kebab_case calibrates at oracle 0.00. So the
-# safe slots are the ones the task never mentions: optional boolean flags, and purely additive
-# decoration (a prefix or suffix around text the task does dictate).
-
 @register
 class FileOverwriteAlways(Rule):
     """Optional boolean the task never mentions -- the cleanest kind of Q2 attribute slot."""
@@ -341,9 +326,7 @@ class SmsGreeting(Rule):
     def satisfied(self, ep, history):
         for call in find_actions(ep, "send_sms"):
             message = str(call.arg("message", "text", default="")).strip()
-            # The recipient's name is not in the api call (only the number), so the checker
-            # verifies the FORM of the greeting, not who it names. Requiring the right name
-            # would make this a lookup task and stop measuring the preference.
+
             if not GREETING_RE.match(message):
                 return False, f"sms lacks an opening greeting: {message[:40]!r}"
         return True, ""
@@ -370,7 +353,7 @@ class PaymentNoteInitials(Rule):
     def satisfied(self, ep, history):
         for call in find_actions(ep, "venmo_payment"):
             note = str(call.arg("description", "note", "memo", default="")).strip()
-            # Form only, same reason as sms_greeting: any two initials in brackets at the end.
+
             if not INITIALS_SUFFIX_RE.search(note):
                 return False, f"note lacks initials suffix: {note[-30:]!r}"
         return True, ""
@@ -393,8 +376,6 @@ class FileContentHeader(Rule):
                            "assistant'.")
 
     def applicable(self, ep):
-        # Only when content was actually written: a create_file that passes no content has no
-        # first line to constrain, so judging it either way would be a different claim.
         return any(str(c.arg("content", "body", "text", default="")).strip()
                    for c in find_actions(ep, "create_file"))
 
@@ -438,22 +419,6 @@ class PaymentNoteCategoryPrefix(Rule):
                 return False, f"note lacks the category tag: {note[:30]!r}"
         return True, ""
 
-
-# ------------------------------------------------- interfering distractors (Q2 rising branch)
-#
-# Distractor attributes exist to be written when L outgrows the evidence. For that to COST
-# anything they have to constrain a field the scored rules also constrain -- a wrong assertion
-# has no other channel through which to hurt. The first Q2 run excluded the one interfering
-# candidate on the grounds that a self-contradictory memory would confound thin evidence with
-# instruction conflict, and the result was that every distractor was about gmail, todoist,
-# spotify or file_system while every scored rule was on phone.message or venmo, so writing them
-# in either direction changed nothing: violation rate was flat from L=8 to L=15 (0.385, 0.438,
-# 0.385) because only inert padding was being added.
-#
-# Instruction conflict IS how a wrong assertion hurts, so these are deliberately on the scored
-# fields. They are never scored themselves, only written, and which direction the posterior
-# picks decides whether a given one interferes -- which is the mechanism, not a flaw. Several
-# of them rather than one keeps the rising branch from resting on a single coin flip.
 
 @register
 class PaymentNoteSingleWord(Rule):
@@ -526,17 +491,6 @@ class SmsTerse(Rule):
                 return False, f"message longer than five words: {word_count(message)}"
         return True, ""
 
-
-# Four more, because at L=15 only 2 of the first 4 landed in their harmful direction and the
-# rising branch came out at +0.125 with a one-sided p of 0.121 -- real in seed 0, one episode in
-# 16 for the other two. Direction is decided by the posterior from thin evidence, so roughly
-# half of any set of candidates lands inert; the fix is to give the count of harmful assertions
-# room to grow rather than to buy resolution at 4x the episodes.
-#
-# These also close a gap: venmo_private was the one scored rule with no interfering counterpart
-# at all, so it could not be harmed no matter how large L got. Claim keys are distinct from the
-# rules they contradict because the bank's composability check requires it -- the conflict is
-# semantic, not a claim collision.
 
 @register
 class VenmoPublicFeed(Rule):

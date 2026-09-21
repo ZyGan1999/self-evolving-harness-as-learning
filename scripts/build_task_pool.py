@@ -1,8 +1,7 @@
-"""R002: build task_pool.json from train+dev metadata.
+"""Build task_pool.json from train+dev metadata.
 
-For each persona: filter tasks by difficulty and app overlap with the persona's
-rules, then greedily pick a frozen eval set covering each relevant app enough
-times; the rest becomes the interaction-stream pool.
+Use frozen task lists for the Q1 crossover and Q3 experiments. Other personas
+use difficulty filtering and greedy coverage of rule-triggering APIs.
 
 Usage: conda run -n appworld-p python scripts/build_task_pool.py [--min-cover 5] [--eval-size 25]
 """
@@ -18,6 +17,43 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from appworld_p.config import PERSONA_DIR, TASK_POOL_PATH, set_appworld_root  # noqa: E402
 from appworld_p.persona import Persona  # noqa: E402
+
+
+FROZEN_SPLITS = {
+    "p5_q1b": PERSONA_DIR.parent / "experiments/q1_running_total.json",
+    "p13_mixed": PERSONA_DIR.parent / "experiments/q3_task_split.json",
+}
+
+
+def frozen_pool(persona: Persona, eligible: list[dict]) -> dict:
+    split = json.loads(FROZEN_SPLITS[persona.name].read_text())
+    eval_ids, stream_ids = split["eval_task_ids"], split["stream_task_ids"]
+    all_ids = eval_ids + stream_ids
+    if split["persona"] != persona.name or len(set(all_ids)) != len(all_ids):
+        raise ValueError(f"Invalid frozen task split for {persona.name}")
+    by_id = {task["task_id"]: task for task in eligible}
+    missing = sorted(set(all_ids) - by_id.keys())
+    if missing:
+        raise ValueError(
+            f"Frozen tasks for {persona.name} are missing or ineligible: {missing}. "
+            "Check AppWorld metadata and --max-difficulty (reported Q3 uses 3)."
+        )
+    if persona.name == "p13_mixed":
+        eval_families = {task.split("_")[0] for task in eval_ids}
+        stream_families = {task.split("_")[0] for task in stream_ids}
+        if eval_families & stream_families:
+            raise ValueError("Q3 training and evaluation task families must be disjoint")
+    cover = Counter(rule for task_id in eval_ids
+                    for rule in by_id[task_id]["triggered_rules"])
+    rule_names = [rule.name for rule in persona.rules]
+    return {
+        "persona": persona.name,
+        "eligible_count": len(all_ids),
+        "eval_task_ids": eval_ids,
+        "stream_task_ids": stream_ids,
+        "eval_rule_cover": {rule: cover[rule] for rule in rule_names},
+        "uncovered_rules": [rule for rule in rule_names if not cover[rule]],
+    }
 
 
 def load_task_metadata() -> list[dict]:
@@ -46,9 +82,7 @@ def load_task_metadata() -> list[dict]:
 
 def build_pool_for_persona(persona: Persona, tasks: list[dict], max_difficulty: int,
                            eval_size: int, min_cover: int, rng: random.Random) -> dict:
-    """Eligibility = the official solution invokes at least one rule-triggering API
-    (required_apis vs rule.trigger_apis), not mere app overlap — this guarantees
-    every stream/eval task actually exercises some preference rule."""
+    """Select tasks whose reference solutions invoke a rule-triggering API."""
     eligible = []
     for t in tasks:
         if (t["difficulty"] or 99) > max_difficulty:
@@ -56,25 +90,23 @@ def build_pool_for_persona(persona: Persona, tasks: list[dict], max_difficulty: 
         triggered = persona.rules_triggered_by(set(t.get("required_apis", [])))
         if triggered:
             eligible.append({**t, "triggered_rules": triggered})
+    if persona.name in FROZEN_SPLITS:
+        return frozen_pool(persona, eligible)
     rng.shuffle(eligible)
-    # never let the eval set eat more than half the (small) eligible pool
+
     eval_size = min(eval_size, max(len(eligible) // 2, 1))
 
-    # greedy eval-set cover: each rule triggered >= min_cover times if possible
+
     eval_set: list[dict] = []
     cover: Counter = Counter()
 
-    # AppWorld task ids are <template>_<variant>: '530b157_1/_2/_3' are three variants of
-    # ONE template. Covering a rule 4x from a single template measures that template's
-    # quirks, not the rule -- p4_q1's first build put 3 of 4 sms tasks in one family. Break
-    # ties toward the least-used template so eval spreads across templates.
+
     fam_used: Counter = Counter()
 
     def gain(t):
         want = sum(1 for r in t["triggered_rules"] if cover[r] < min_cover)
-        # rank: covers anything new > least-used template > covers the most. Family
-        # diversity must outrank the count, or a template that happens to trigger both
-        # rules wins every pick and fills eval by itself (it did: 530b157 took 3 of 4).
+
+
         return (min(want, 1), -fam_used[t["task_id"].split("_")[0]], want)
 
     remaining = list(eligible)
@@ -102,7 +134,7 @@ def build_pool_for_persona(persona: Persona, tasks: list[dict], max_difficulty: 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--max-difficulty", type=int, default=2)
+    parser.add_argument("--max-difficulty", type=int, default=3)
     parser.add_argument("--eval-size", type=int, default=25)
     parser.add_argument("--min-cover", type=int, default=5)
     parser.add_argument("--seed", type=int, default=13)
@@ -129,7 +161,7 @@ def main() -> None:
         persona = Persona.load(yaml_path)
         if args.only and persona.name not in args.only:
             continue
-        # per-persona rng: adding a persona must not perturb any other pool
+
         rng = random.Random(f"{args.seed}:{persona.name}")
         pool = build_pool_for_persona(persona, tasks, args.max_difficulty,
                                       args.eval_size, args.min_cover, rng)

@@ -1,17 +1,7 @@
-"""Agents that solve AppWorld tasks.
-
-ReactCodeAgent:    minimal ReAct code agent (LLM writes python against world.execute).
-FunctionCallAgent: constrained actuator — one API call per turn, literal args only
-                   (AST-enforced). The convex-hull claims are honest on this agent:
-                   f cannot outsource computation to the interpreter (Q1 redesign,
-                   see refine-logs/Q1_REDESIGN.md).
-OracleAgent:       executes the official ground-truth solution (train/dev only) — the
-                   cheap execution mode for pipeline validation and Exp-1 sensitivity.
-
-Harness injection: `memory` (context class) is inserted into the system prompt;
-`external_stats` (control class, external counter) is injected as a structured
-section.
-"""
+"""AppWorld agents.
+FunctionCallAgent permits one API call with literal arguments per turn.
+ReactCodeAgent executes model-generated Python; OracleAgent executes the official solution.
+Personalization text and harness-computed statistics occupy separate prompt sections."""
 
 import ast
 import re
@@ -67,7 +57,7 @@ MEMORY_TEMPLATE = "\nWhat you remember about this user:\n<memory>\n{memory}\n</m
 STATS_TEMPLATE = "\nLive statistics about this user (maintained externally):\n<stats>\n{stats}\n</stats>\n"
 
 CODE_RE = re.compile(r"```(?:python)?\s*\n(.*?)```", re.DOTALL)
-# Some models/relays emit pseudo-XML tool-call syntax instead of fenced blocks.
+
 XML_CODE_RE = re.compile(r'<parameter name="code">\s*(.*?)\s*</parameter>', re.DOTALL)
 
 
@@ -85,8 +75,6 @@ def extract_code(text: str) -> str:
 
 
 class ReactCodeAgent:
-    # No autofill hook: this agent writes free-form python, so there is no single validated call
-    # to intercept. The autofill harness is defined only for the constrained FC actuator.
     def __init__(self, llm: BaseLLM, max_steps: int = 30, memory: str = "",
                  external_stats: str = "", temperature: float = 0.7,
                  verbose: bool = False):
@@ -274,14 +262,19 @@ class FunctionCallAgent:
                 rejected += 1
                 output = f"PROTOCOL ERROR: {error}. {FC_PROTOCOL_REMINDER}"
             else:
-                # control-class harness: rewrite the preference-owned field from the harness's
-                # own ledger before the call lands. Placed after validation so a malformed call
-                # still surfaces as a protocol error rather than being silently repaired.
+                repair = None
                 if self.autofill is not None:
                     canonical, repair = self.autofill.apply(canonical)
-                    if repair and repair["changed"]:
-                        autofill_log.append({"step": steps, **repair})
+                request_start = len(world.requester.request_tracker.requests) if repair else 0
                 output = world.execute(f"print({canonical})")
+                if repair is not None:
+                    requests = world.requester.request_tracker.requests[request_start:]
+                    if any("succeeded" not in r for r in requests):
+                        raise RuntimeError("Payment outcome tracking is required for autofill")
+                    succeeded = any(r["succeeded"] for r in requests)
+                    self.autofill.commit(repair, succeeded)
+                    if repair["changed"]:
+                        autofill_log.append({"step": steps, **repair})
             messages.append({"role": "assistant", "content": reply})
             messages.append({"role": "user", "content": f"Output:\n{str(output)[:4000]}"})
             transcript.append({"step": steps, "raw_reply": reply,

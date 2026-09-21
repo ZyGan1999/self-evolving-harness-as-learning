@@ -12,15 +12,15 @@ The language model is held fixed within each experiment. We vary only the local 
 | **Q2: generalization** | How does the number of learned memory statements, \(L\), affect preference violations? | Nine memory lengths under constant full relevance |
 | **Q3: optimization** | Does a self-evolving memory reach the oracle, or plateau above it? | ACE-style updates, static references, and memory-update baselines |
 
-The primary metric is preference violation rate on a frozen evaluation set. Task goal completion (TGC) is recorded as a guardrail.
+The primary metric is preference violation rate on a frozen evaluation set.
 
 ## Repository layout
 
 ```text
 appworld_p/          Agent, session driver, rules, feedback, and memory updaters
-configs/personas/    Six personas used by the reported experiments
+configs/personas/    Five personas used by the reported experiments
+configs/experiments/ Frozen task splits and experiment protocols
 scripts/             Experiment runners and analysis utilities
-tests/               Unit tests for the released execution paths
 ```
 
 
@@ -45,30 +45,46 @@ cp .env.example .env
 The reported configuration uses the model identifier
 `anthropic:claude-haiku-4-5-20251001`. `ANTHROPIC_BASE_URL` may point to an Anthropic-compatible endpoint.
 
-Verify connectivity:
-
-```bash
-python scripts/test_llm.py anthropic:claude-haiku-4-5-20251001
-```
-
 ## Prepare the task pool
 
 Experiment sessions are not distributed. Before the first run, deterministically construct the task pool from AppWorld train and development metadata:
 
 ```bash
 python scripts/build_task_pool.py \
-  --only p3_fc p4_q1 p5_q1b p7_offtopic p8_q2s1 p13_mixed
+  --max-difficulty 3 --only p4_q1 p5_q1b p13_mixed
+
+python scripts/build_task_pool.py \
+  --from-cache --max-difficulty 2 --only p8_q2s1
 ```
 
-The default pool seed is 13. Building the pool scans the AppWorld task metadata and may take approximately 30 minutes.
+The default pool seed is 13 and the default difficulty limit is 3. The first
+command reproduces the Q1 main split (eight training tasks, seven evaluation
+tasks) and loads the frozen Q1 crossover and Q3 splits from configs/experiments/.
+The crossover uses six training and six evaluation tasks. Q3 uses nine training
+and six evaluation tasks with no shared template families: evaluation has three
+phone tasks from 0d8a4ee and three Venmo tasks from 37a8675; training uses
+29caf6f, 60d0b5b, and 530b157. For these frozen splits, seed and greedy coverage
+settings do not change the task lists; missing or ineligible tasks raise an error.
 
-After data and task-pool preparation, run the test suite:
-
-```bash
-python -m pytest tests/ -q
-```
+The second command preserves those pools and builds the Q2 task
+pool at its original difficulty limit of 2. The habitual-card runner uses its
+own six fixed evaluation tasks and does not require a p3_fc task pool.
+The initial metadata scan may take approximately 30 minutes; the second command
+reuses the cache.
 
 ## Q1: harness reachability
+
+### Running-total configuration
+
+The running-total checker scores successful payments only. Autofill prepares a
+note before execution and commits the amount to its ledger only after a successful
+API response. Failed payment attempts remain in the logs for auditing and for
+preferences that explicitly score attempted actions.
+
+The frozen crossover protocol is in `configs/experiments/q1_running_total.json`:
+three seeds, six evaluation tasks, six training episodes for the learned arm,
+checkpoints 0/3/6, and a 60-step budget. The SMS sign-off preference is retained
+alongside running totals to preserve the original persona and feedback conditions.
 
 The five reported Q1 preference panels come from three experimental configurations.
 
@@ -79,7 +95,7 @@ for seed in 0 1 2 3 4 5; do
     --llm anthropic:claude-haiku-4-5-20251001 \
     --persona p4_q1 --agent fc \
     --arms baseline oracle1 learned oracle_verifier oracle_verifier_value \
-    --n-train 8 --checkpoints 0 4 8 --max-steps 50 \
+    --n-train 8 --checkpoints 0 4 8 --n-eval 7 --max-steps 50 \
     --seed "$seed" --tag _q1main
 done
 
@@ -90,7 +106,7 @@ for seed in 0 1 2; do
     --persona p5_q1b --agent fc \
     --arms baseline oracle1 learned oracle_verifier oracle_verifier_value \
            oracle_stats oracle_autofill \
-    --n-train 8 --checkpoints 0 4 8 --max-steps 50 \
+    --n-train 6 --checkpoints 0 3 6 --n-eval 6 --max-steps 60 \
     --seed "$seed" --tag _q1cross
 done
 
@@ -107,7 +123,9 @@ done
 
 ## Q2: memory length
 
-The reported Q2 result uses the `p8_q2s1` R arm. Every injected statement concerns a scored preference, keeping relevance fixed at 1.0. The sweep uses nine lengths, three evaluation seeds, 12 tasks per cell, and 10 rollouts per task.
+The R arm requires only the target assertion pools; no donor collection is needed.
+The six-rule diagnostic re-scores the same episodes, excluding SMS terseness and
+payment-note presence. The reported Q2 result uses the `p8_q2s1` R arm. Every injected statement concerns a scored preference, keeping relevance fixed at 1.0. The sweep uses nine lengths, three evaluation seeds, 12 tasks per cell, and 10 rollouts per task.
 
 ```bash
 # Collect learner-induced assertion pools
@@ -116,10 +134,6 @@ for seed in 1 2; do
     --llm anthropic:claude-haiku-4-5-20251001 \
     --persona p8_q2s1 --n-train 32 --seed "$seed" --tag _v1
 done
-
-python scripts/run_exp2_pool.py \
-  --llm anthropic:claude-haiku-4-5-20251001 \
-  --persona p7_offtopic --n-train 32 --seed 1 --tag _d1
 
 # Run the R-arm length sweep
 for seed in 1 2 3; do
@@ -133,6 +147,7 @@ for seed in 1 2 3; do
 done
 
 python scripts/aggregate_s1_seeds.py
+python scripts/aggregate_s1_seeds.py --exclude sms_terse payment_has_note
 ```
 
 
@@ -180,10 +195,31 @@ for seed in 0 1 2; do
     --seed "$seed" --tag _p13bl
 done
 
-# Backfill n=1,2,3,4 on the saved ACE memory trajectories
-python scripts/backfill_q3_checkpoints.py \
-  --llm anthropic:claude-haiku-4-5-20251001 \
-  --seeds 0 1 2 --at 1 2 3 4 --rollouts 3
-
 python scripts/compare_q3_arms.py
 ```
+
+
+## Included entry points
+
+| Scripts | Purpose |
+|---|---|
+| build_task_pool.py | Prepare task splits |
+| run_exp1.py, run_exp1b.py | Run the reported Q1 comparisons |
+| gate_elimination_ceiling.py | Compute the card-cycling diagnostic described in Appendix A.1 |
+| run_exp2_pool.py, run_exp2_arms.py | Collect Q2 assertions and run the R-arm sweep |
+| aggregate_s1_seeds.py | Aggregate Q2 counts and the six-rule re-scoring |
+| run_q3_evolve.py, compare_q3_arms.py | Run and summarize Q3 methods and diagnostics |
+
+Q1 uses three context conditions (No memory, Stated, From history) and two
+control conditions: Checker rejects adds verification and retry; Harness computes
+uses external statistics, computed feedback, or action-field rewriting.
+Q3 TRACE retries against its own learned checks, while Q1 Checker rejects uses
+the ground-truth persona checker.
+
+TEPA retains one active precedent per key with revocation history. Its prompt
+specifies the TEPA_KEYS vocabulary and permits other.* keys; recognized key
+variants are mapped back to the vocabulary. TRACE uses the predicate vocabulary
+and literal limits in baseline_updaters.py, with a 12-check capacity and up to
+three attempts. Reflexion retains three reflections; ACE retains at most 12
+bullets. Reflexion, TEPA, and TRACE filter authentication calls and redact
+credential arguments before constructing updater inputs.

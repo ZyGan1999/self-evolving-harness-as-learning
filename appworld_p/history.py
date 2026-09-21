@@ -12,21 +12,19 @@ from pathlib import Path
 
 from .episode import EpisodeRecord
 
-# Logical payment actions we track for frequency/recency rules.
+
 PAYMENT_APPS = ("venmo", "splitwise")
 
 
 @dataclass
 class SessionHistory:
-    payment_card_choices: list[str] = field(default_factory=list)  # card ids (venmo/amazon), in order
-    payment_count: int = 0                                         # money-transfer txns across sessions
+    payment_card_choices: list[str] = field(default_factory=list)
+    payment_count: int = 0
     email_count: int = 0
     episodes_seen: int = 0
-    # --- family B (statistical aggregation): driver-side habit ground truth ---
-    # Set by the driver from its HabitStream; the checker for `usual_card` reads it.
-    # Never exposed to the agent (arms see the log or the counter, never this).
-    habit_target: str | None = None      # bank name of the user's habitual card
-    habit_rounds: int = 0                # how many habit observations exist so far
+
+    habit_target: str | None = None
+    habit_rounds: int = 0
 
     def update(self, ep: EpisodeRecord) -> None:
         self.episodes_seen += 1
@@ -65,7 +63,6 @@ class SessionHistory:
                      f"Episodes interacted: {self.episodes_seen}.")
         return "\n".join(lines)
 
-    # -- persistence -------------------------------------------------------
     def save(self, path: str | Path) -> None:
         Path(path).write_text(json.dumps(self.__dict__, indent=1))
 

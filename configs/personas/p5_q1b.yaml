@@ -1,30 +1,5 @@
-# P5: the Q1 crossover persona. Same in/out contrast as p4_q1, with the two classes on
-# the OPPOSITE apps, so a reader cannot explain the result by "venmo rules are easy and
-# phone rules are hard".
-#
-#            in-support              out-of-support
-#   p4_q1    private_note_format     sms_char_checksum        (venmo / phone)
-#   p5_q1b   sms_signoff             spend_total_per_recipient (phone / venmo)
-#
-# Both rules here calibrated cleanly on the FC actuator (2026-07-28):
-#  - sms_signoff: empty memory 0.00 -> oracle 1.00, twice, on two task batches. The
-#    cleanest in-support carrier in the registry. It cannot share a persona with
-#    sms_char_checksum: both claim phone.message_suffix and their statements are mutually
-#    unsatisfiable, which is why it needs this second persona rather than a slot in p4_q1.
-#  - spend_total_per_recipient: empty memory 0.00 -> oracle 0.00, with the note format
-#    always right and the figure always short (846 vs 937, 74 vs 347, 100 vs 316) -- the
-#    signature of exact aggregation failing, not of a misunderstood statement. Measured at
-#    max_steps=60; at 30 the agent spends its whole budget paginating the transaction list
-#    and never pays, which reads as applicable=False and confounds the two failure modes.
-#
-# Field claims stay disjoint: phone.message_suffix (sms_signoff),
-# venmo.note_suffix (spend_total_per_recipient).
 name: p5_q1b
-description: >
-  The crossover of p4_q1: one in-support rule and one out-of-support rule, same actuator,
-  same eval set, with the classes swapped onto the other app. sms_signoff is satisfied
-  from a plain statement, while spend_total_per_recipient needs exact aggregation over the
-  transaction history and no statement suffices.
+description: 'Q1 crossover persona: SMS sign-off and per-recipient running spend total.'
 rules:
-  - sms_signoff
-  - spend_total_per_recipient
+- sms_signoff
+- spend_total_per_recipient

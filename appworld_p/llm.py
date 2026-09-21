@@ -12,21 +12,7 @@ from pathlib import Path
 import httpx
 from dotenv import load_dotenv
 
-# Keys/base-urls can live in experiments/.env (gitignored):
-#   ANTHROPIC_API_KEY=...   ANTHROPIC_BASE_URL=https://relay.example.com
-#   OPENAI_API_KEY=...      OPENAI_BASE_URL=...
-#
-# override=True, and it is load-bearing. The default (False) makes the AMBIENT environment win
-# over the file, and this harness runs inside Claude Code, whose ~/.claude/settings.json sets
-# ANTHROPIC_BASE_URL for the *app's own* API access. That value is injected into every process
-# the session spawns, so with override=False a new relay written into .env was silently ignored
-# and every call went to the app's relay with the new key -> 401 Unauthorized, which reads as a
-# bad key rather than a shadowed URL. .env is the file a human edits and the file that gets
-# copied to the server, so for this harness it is the authority.
-#
-# This is not a blanket clobber: load_dotenv only touches keys the file actually defines, so a
-# machine that configures credentials purely through the environment and has no .env is
-# unaffected.
+
 load_dotenv(Path(__file__).resolve().parent.parent / ".env", override=True)
 
 
@@ -52,23 +38,13 @@ class LLMUsage:
     output_tokens: int = 0
 
 
-# Rate limit, plus every 5xx. An explicit allow-list kept missing codes: it had
-# {429,500,502,503,504,529} and a relay 520 -- Cloudflare's "unknown origin error", one of the
-# transient 520-527 family -- killed a 32-episode collection 13 episodes in. Server-side
-# statuses are exactly the ones a retry can fix, so the rule is now the class, not a list.
 def is_retryable(status: int) -> bool:
     return status == 429 or 500 <= status < 600
 
 
 def post_with_retry(client: httpx.Client, url: str, *, headers: dict, json: dict,
                     max_attempts: int = 10) -> httpx.Response:
-    """POST with exponential backoff on transient failures; long runs must survive
-    relay hiccups (a single 503 used to kill an 80-episode calibration).
-
-    6 attempts capped at 60s covered about a minute of downtime, which was not enough: the
-    relay went down for several minutes mid-sweep and took two seeds of p5_q1b with it, one
-    of them 75 minutes in. 10 attempts capped at 120s covers roughly ten minutes.
-    """
+    """POST with exponential backoff for transient HTTP failures."""
     delay = 2.0
     for attempt in range(1, max_attempts + 1):
         try:
@@ -80,7 +56,7 @@ def post_with_retry(client: httpx.Client, url: str, *, headers: dict, json: dict
             if not is_retryable(status) or attempt == max_attempts:
                 raise
             reason = f"HTTP {status}"
-        except httpx.TransportError as exc:  # timeouts, resets, DNS
+        except httpx.TransportError as exc:
             if attempt == max_attempts:
                 raise
             reason = type(exc).__name__
@@ -113,16 +89,13 @@ class AnthropicLLM(BaseLLM):
         base_url = base_url or os.environ.get("ANTHROPIC_BASE_URL", "https://api.anthropic.com")
         self.usage = LLMUsage()
         self._client = httpx.Client(base_url=base_url.rstrip("/"), timeout=180.0)
-        # Print where calls are going. A wrong-relay bug is otherwise invisible: it surfaces as a
-        # 401 deep in a sweep log with no indication that the URL was not the one in .env. Host
-        # and endpoint are not secret; the key is shown as its last 4 only, which is enough to
-        # tell two keys apart in a log without recording either.
+
         _announce(f"anthropic:{model}", self._client._merge_url("/v1/messages"), self.api_key)
 
     def generate(self, system, messages, max_tokens=2048, temperature=0.7):
         resp = post_with_retry(
             self._client, "/v1/messages",
-            # relays variously expect x-api-key or Authorization; send both
+
             headers={"x-api-key": self.api_key,
                      "Authorization": f"Bearer {self.api_key}",
                      "anthropic-version": "2023-06-01"},

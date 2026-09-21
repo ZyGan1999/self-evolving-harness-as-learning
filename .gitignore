@@ -22,6 +22,7 @@ outputs/
 # Plotting code excluded from the source-only release
 scripts/plot_*.py
 scripts/paper_*.py
+scripts/q[123]_redesign.py
 
 # Internal experiment documentation
 docs/
@@ -36,3 +37,9 @@ docs/
 .DS_Store
 .idea/
 .vscode/
+
+# Local validation and rerun utilities
+/tests/
+/pytest.ini
+/scripts/test_llm.py
+/scripts/rerun_running_total.py

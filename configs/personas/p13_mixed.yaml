@@ -1,55 +1,9 @@
-# P13: a preference set where self-evolution helps on every rule and oracle helps more.
-#
-# Six iterations went looking for one rule whose single trajectory descends and then flattens. That
-# framing was too narrow. The claim only needs each preference to be PARTIALLY solved by
-# self-evolution and better solved by oracle context; the aggregate of several such preferences is
-# then a curve that descends and stops above oracle, which is the shape being reported.
-#
-# What makes a preference partially solvable is now a mechanical property rather than a guess. A
-# rule is unlearnable-in-principle from instance feedback when its oracle_text contains a LITERAL
-# that the checker's detail never emits, because the learner is then being asked to produce a string
-# it has never been shown:
-#
-#   payment_note_category   oracle names '[personal]'   detail: "note lacks the category tag: 'dinner'"
-#   payment_note_initials   oracle names '(J.D.)'       detail: "note lacks initials suffix: 'dinner'"
-#
-# Screened by executing every rule's checker and diffing the quoted literals in oracle_text against
-# the detail string. The other three rules have no such literal -- their targets are forms the
-# complaint fully describes -- so they are learnable and serve as the descent.
-#
-# Roles, from the one-shot screen (docs/Q3.md 3.1). All five are in-support; the axis that
-# splits them is whether the target literal appears in the feedback, giving 3 carriable and 2
-# not. One-shot rates do NOT predict iterative ones, so these are the hypothesis and the run is
-# the test:
-#
-#   payment_note_category    base 1.00  self 1.00  oracle 0.00   NOT carriable (literal withheld)
-#   payment_note_initials    base 1.00  self 1.00  oracle 0.00   NOT carriable (literal withheld)
-#   sms_greeting             base 1.00  self 0.00  oracle 0.00   carriable, fully learned
-#   sms_signoff              base 1.00  self 0.17  oracle 0.00   carriable, partially learned
-#   venmo_private            base 0.50  self 0.20  oracle 0.20   carriable, but oracle is also
-#                            nonzero -- so it is the NEGATIVE CONTROL: self-evolution matches
-#                            oracle there and eps_opt ~ 0, which is why it does not descend.
-#                            (one-shot screen values; the Q3 main run measures oracle 0.375
-#                            on the largest sample -- cite that number, not these)
-#
-# category and initials were excluded from p9 only because that persona carried
-# payment_note_single_word, which forbids brackets. It is absent here, so both are available: they
-# claim note_prefix and note_suffix, opposite ends of the same field, and
-# '[personal] dinner (L.O.)' satisfies both. Verified by running the checkers, together with all
-# five on one episode.
-#
-# The eval and stream families both trigger venmo and phone writes, and the split is family
-# disjoint. p12 showed why the split has to be checked against MEASURED violation density rather
-# than task text: 60d0b5b reads as a free-note task but its refund context makes the agent write
-# "refund" unprompted, which already complies.
 name: p13_mixed
-description: >
-  Five preferences over venmo and phone. Two of them name a literal the complaint never carries, so
-  self-evolution cannot reach them while oracle context can; the other three are forms the complaint
-  fully describes. The aggregate measures how far self-evolution gets before it stops.
+description: Five jointly satisfiable preferences for Q3. Instance feedback withholds
+  the payment-note category and initials format.
 rules:
-  - payment_note_category
-  - payment_note_initials
-  - venmo_private
-  - sms_greeting
-  - sms_signoff
+- payment_note_category
+- payment_note_initials
+- venmo_private
+- sms_greeting
+- sms_signoff

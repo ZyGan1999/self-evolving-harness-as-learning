@@ -20,20 +20,20 @@ from ..history import SessionHistory
 class RuleResult:
     rule: str
     applicable: bool
-    satisfied: bool | None  # None iff not applicable
+    satisfied: bool | None
     detail: str = ""
 
 
 class Rule:
     name: str = ""
-    pool: str = ""              # "A" (in-support candidate) | "B" (out-of-support candidate)
-    apps: tuple[str, ...] = ()  # apps whose presence in a task makes this rule *possibly* applicable
-    trigger_actions: tuple[str, ...] = ()  # api_map ACTIONS whose invocation makes it applicable
-    field_claims: tuple[str, ...] = ()  # e.g. ("gmail.body",) — conflict detection across rules
-    oracle_text: str = ""       # clearest natural-language statement (for oracle-c / calibration)
-    negation_text: str = ""     # assertion of the OPPOSITE preference (eta calibration, Exp-2
-                                # paired candidates); empty = no natural negation
-    correction_template: str = ""  # corrective-tier feedback when violated
+    pool: str = ""
+    apps: tuple[str, ...] = ()
+    trigger_actions: tuple[str, ...] = ()
+    field_claims: tuple[str, ...] = ()
+    oracle_text: str = ""
+    negation_text: str = ""
+
+    correction_template: str = ""
 
     def trigger_apis(self) -> set[str]:
         """'{app}.{api}' strings that trigger this rule (matches ground_truth.required_apis)."""
@@ -99,12 +99,9 @@ def build_rules(names: list[str]) -> list[Rule]:
     return rules
 
 
-# ---- shared text helpers --------------------------------------------------
-
 GREETING_RE = re.compile(r"^\s*(hi|hello|hey|dear)\b", re.IGNORECASE)
-# Two or more dotted initials in brackets at the very end, e.g. '(J.D.)'. Checked as a FORM,
-# not against the supervisor's actual initials: requiring the right letters would turn the
-# preference into a profile-lookup task and stop measuring whether memory was followed.
+
+
 INITIALS_SUFFIX_RE = re.compile(r"\((?:[A-Za-z]\.){2,}\)\s*$")
 KEBAB_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 DATE_PREFIX_RE = re.compile(r"^\d{4}-\d{2}-\d{2}:\s")

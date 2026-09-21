@@ -1,7 +1,3 @@
-"""AppWorld-P: preference overlay on the AppWorld benchmark.
-
-Layers a synthetic-persona personalization sandbox on top of AppWorld
-without modifying AppWorld itself. See ../refine-logs/APPWORLD_ADAPTATION.md.
-"""
+"""AppWorld-P: executable user preferences over unmodified AppWorld task environments."""
 
 __version__ = "0.1.0"

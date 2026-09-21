@@ -1,0 +1,41 @@
+{
+  "persona": "p5_q1b",
+  "stream_task_ids": [
+    "0d8a4ee_3",
+    "60d0b5b_1",
+    "29caf6f_3",
+    "37a8675_2",
+    "60d0b5b_2",
+    "29caf6f_1"
+  ],
+  "eval_task_ids": [
+    "0d8a4ee_2",
+    "29caf6f_2",
+    "37a8675_3",
+    "60d0b5b_3",
+    "0d8a4ee_1",
+    "37a8675_1"
+  ],
+  "n_train": 6,
+  "checkpoints": [
+    0,
+    3,
+    6
+  ],
+  "max_steps": 60,
+  "seeds": [
+    0,
+    1,
+    2
+  ],
+  "llm": "anthropic:claude-haiku-4-5-20251001",
+  "arms": [
+    "baseline",
+    "oracle1",
+    "learned",
+    "oracle_verifier",
+    "oracle_verifier_value",
+    "oracle_stats",
+    "oracle_autofill"
+  ]
+}

@@ -18,7 +18,7 @@ from typing import Any
 
 from .autofill import SpendTotalAutofill
 from .agent import FunctionCallAgent, OracleAgent, ReactCodeAgent
-from .apicalls import resolve_call, was_rejected
+from .apicalls import resolve_call, was_rejected, track_payment_outcomes
 from .config import EXPERIMENTS_DIR, OUTPUTS_DIR, set_appworld_root
 from .episode import EpisodeRecord
 from .feedback import make_feedback
@@ -64,19 +64,8 @@ print([round(sum(float(t['amount']) for t in _sent), 2), len(_sent), _per])
 
 
 def render_spend_stats(spend_totals: dict) -> str:
-    """The harness-computed statistic for the running-total preference.
-
-    This is the `usual_card` counter's analogue: the aggregate f cannot hold reliably is computed
-    outside f and handed over, while f still decides what to do with it. The contrast the pair is
-    built for is in the functional form -- the card counter feeds an argmax (error-tolerant), this
-    feeds an exact sum (error-intolerant), so if injection rescues one and not the other, the
-    difference is the shape of the target, not the amount of information.
-
-    It states the pre-episode figure per recipient and says explicitly that this episode's
-    payments accumulate on top -- but it does not do that addition, which is what separates this
-    arm from autofill. Everything here is already reachable through the paginated API the agent
-    can call itself; the harness only saves it the traversal.
-    """
+    """Render read-only ledger statistics for the model.
+    The model remains responsible for constructing the payment description."""
     per = spend_totals.get("per_recipient") or {}
     if not per:
         return ""
@@ -100,7 +89,7 @@ def read_spend_totals(world) -> dict:
     import ast
     try:
         raw = world.execute(SPEND_LOOKUP_CODE).strip()
-    except Exception as exc:  # a lookup failure must not kill the episode
+    except Exception as exc:
         print(f"    !! spend lookup failed: {exc}", flush=True)
         return {}
     for parse in (ast.literal_eval, json.loads):
@@ -120,7 +109,7 @@ def read_card_names(world) -> dict[str, str]:
     import ast
     try:
         raw = world.execute(CARD_LOOKUP_CODE).strip()
-    except Exception as exc:  # a lookup failure must not kill the episode
+    except Exception as exc:
         print(f"    !! card lookup failed: {exc}", flush=True)
         return {}
     for parse in (ast.literal_eval, json.loads):
@@ -138,73 +127,43 @@ class SessionConfig:
     persona_path: str
     stream_task_ids: list[str]
     eval_task_ids: list[str] = field(default_factory=list)
-    checkpoints: list[int] = field(default_factory=list)   # evaluate after these many train episodes
-    agent: str = "oracle"            # "oracle" | "react" | "fc" (constrained actuator)
-    llm: str = "mock"                # llm spec for react agent (see llm.build_llm)
+    checkpoints: list[int] = field(default_factory=list)
+    agent: str = "oracle"
+    llm: str = "mock"
     feedback_tier: str = "corrective"
     max_steps: int = 30
     seed: int = 0
     notes: str = ""
-    extra_rules: tuple[str, ...] = ()   # scored on top of the persona's own rules:
-                                        # calibration measures a RULE, which need not
-                                        # belong to any persona
-    # --- harness arm configuration (Exp-1) ---
-    memory_mode: str = "updater"     # "updater" | "none" | "oracle" | "fixed" | "fulllog"
-    oracle_verbosity: int = 1        # for memory_mode="oracle": persona.oracle_context(v)
-    fixed_memory: str = ""           # for memory_mode="fixed"
-    eval_label_n: int | None = None  # label eval rows with THIS n instead of the count of train
-                                     # episodes actually run. Only for backfilling a checkpoint
-                                     # into a finished evolving run: the memory for stream
-                                     # position n is replayed from that run's own audit trail and
-                                     # injected via memory_mode="fixed", so no training is
-                                     # re-executed and the new point lands on the SAME memory
-                                     # trajectory as the original checkpoints. Re-running the
-                                     # stream instead would resample at temperature 0.7 and put
-                                     # the new point on a different trajectory than its
-                                     # neighbours. See scripts/replay_ace_memory.py.
-    inject_stats: bool = False       # control class: external counter injected as <stats>
-    # --- family B: statistical-aggregation habit stream (see appworld_p/habit.py) ---
-    habit_dominant: str = ""         # bank name carrying most of pi_u ("" = habit off)
-    habit_tier: str = "binary"       # "binary" (out regime) | "corrective" (in regime)
-    habit_noisy: bool = False        # interleave unrelated interaction lines
-    habit_noise_per_round: float = 1.0   # dilution density: mean noise lines per round
+    extra_rules: tuple[str, ...] = ()
+
+    memory_mode: str = "updater"
+    oracle_verbosity: int = 1
+    fixed_memory: str = ""
+    eval_label_n: int | None = None
+
+    inject_stats: bool = False
+
+    habit_dominant: str = ""
+    habit_tier: str = "binary"
+    habit_noisy: bool = False
+    habit_noise_per_round: float = 1.0
     habit_schedule: list[int] = field(default_factory=list)
-                                     # cumulative habit-observation counts to evaluate at,
-                                     # e.g. [0, 20, 60, 120] — the log-length sweep
-    inject_spend_totals: bool = False  # control class: the harness computes the per-recipient
-                                     # running total and injects it as a statistic; f still
-                                     # decides what to write. The counter analogue of
-                                     # inject_stats, for an error-INTOLERANT aggregate.
-    autofill_spend_total: bool = False  # control class: the harness maintains the running
-                                     # per-recipient total and rewrites the memo tag at call
-                                     # time, so f never has to hold the sum. FC actuator only.
-    verifier_attempts: int = 1       # control class: episode-level best-of-n with checker
-                                     # verifier (1 = gate off)
-    self_gate_attempts: int = 1      # TRACE (arXiv:2606.13174): retry against the UPDATER's own
-                                     # compiled checks, not the persona's. Separate from
-                                     # verifier_attempts on purpose -- this gate is part of the
-                                     # recipe under test, and enforcing with the persona checkers
-                                     # would hand that arm the ground truth every other arm is
-                                     # denied, silently making it a control-class arm. Requires
-                                     # the updater to expose check(ep) -> list[str].
-    verifier_nonleaking: bool = False  # reject-only gate that uses Rule.gate_detail instead of
-                                     # `detail`: says what the attempt did, never the target.
-                                     # For rules whose `detail` names the answer, this is the
-                                     # only admissible way to run a reject-only arm.
-    verifier_accumulate: bool = False  # carry every attempt's rejection forward instead of
-                                     # replacing it. Retries get a fresh context, so without
-                                     # this the agent forgets which options were already
-                                     # excluded and the gate measures memory, not mechanism.
-    verifier_feedback: bool = True   # pass the linter's violation report into retry
-                                     # attempts (checker output flowing through the call
-                                     # topology — knowledge via program state, not learning)
-    verifier_detail: bool = False     # ALSO hand back the checker's computed expectation
-                                     # ('expected 1 for 393 chars'), not just a restatement
-                                     # of the rule. Separates detecting a violation from
-                                     # supplying the computation the model cannot do: on
-                                     # sms_char_checksum the reject-only gate exhausts all
-                                     # 3 attempts and still fails, because each retry
-                                     # recomputes the same wrong character count.
+
+    inject_spend_totals: bool = False
+
+    autofill_spend_total: bool = False
+
+    verifier_attempts: int = 1  # Lightweight control using the persona checker.
+
+    self_gate_attempts: int = 1  # TRACE retries use only its learned checks.
+
+    verifier_nonleaking: bool = False
+
+    verifier_accumulate: bool = False
+
+    verifier_feedback: bool = True
+
+    verifier_detail: bool = False  # Return computed values only in value-feedback arms.
 
 
 class SessionDriver:
@@ -229,13 +188,12 @@ class SessionDriver:
         self.out_dir.mkdir(parents=True, exist_ok=True)
         self.rows: list[dict] = []
         self._correction_templates = {r.name: r.correction_template for r in self.persona.rules}
-        # only pay the extra world.execute() when a rule actually speaks bank names
+
         self._needs_card_names = any(r.name == "usual_card" for r in self.persona.rules)
-        # same idea for the exact-aggregation rules: paginating the whole transaction list is
-        # expensive, so only do it when a rule is defined against that total
+
         self._needs_spend_totals = any(r.name.startswith("spend_total_")
                                        for r in self.persona.rules)
-        # progress tracking
+
         n_checkpoints = len(config.habit_schedule or config.checkpoints)
         self._total_episodes = (len(config.stream_task_ids)
                                 + len(config.eval_task_ids) * n_checkpoints)
@@ -250,7 +208,6 @@ class SessionDriver:
         print(f"  [{self._done_episodes}/{self._total_episodes}] {label} | "
               f"elapsed {elapsed/60:.1f}m | eta {remaining/60:.1f}m", flush=True)
 
-    # ------------------------------------------------------------------ episodes
     def _current_memory(self) -> str:
         mode = self.config.memory_mode
         if mode == "updater":
@@ -262,8 +219,6 @@ class SessionDriver:
         if mode == "fixed":
             return self.config.fixed_memory
         if mode == "fulllog":
-            # context-class information upper bound: the adoptable rule statement plus
-            # the complete raw interaction log (grows with n; no statistic computed)
             parts = [self.persona.oracle_context(self.config.oracle_verbosity)]
             if self.habit and self.habit.rounds:
                 parts.append("Record of my past card payments and how I reacted:\n"
@@ -273,47 +228,43 @@ class SessionDriver:
 
     def _run_episode_once(self, task_id: str, phase: str, session_index: int,
                           experiment_name: str, extra_memory: str = "") -> EpisodeRecord:
-        from appworld import AppWorld  # deferred: needs APPWORLD_ROOT set
+        from appworld import AppWorld
 
         memory = self._current_memory()
         if extra_memory:
             memory = (memory + "\n\n" + extra_memory).strip()
         external_stats = ""
         if self.config.inject_stats:
-            # family B: the acceptance-rate counter over the habit log; otherwise the
-            # generic session counters (running counts, recent cards)
             external_stats = (self.habit.external_stats() if self.habit
                               else self.history.render_external_stats())
         with AppWorld(task_id=task_id, experiment_name=experiment_name,
                       ground_truth_mode="full", raise_on_failure=False) as world:
-            # read-only lookup BEFORE the agent runs: world-local card ids -> bank names
             card_names = read_card_names(world) if self._needs_card_names else {}
             spend_totals = read_spend_totals(world) if self._needs_spend_totals else {}
             if self.config.inject_spend_totals:
-                # must be built here, not above: the figure it states is world-local and only
-                # available once the episode's world is open
                 external_stats = "\n\n".join(
                     x for x in (external_stats, render_spend_stats(spend_totals)) if x)
             if self.config.agent == "oracle":
-                agent_info = OracleAgent().solve(world)
+                with track_payment_outcomes(world.requester):
+                    agent_info = OracleAgent().solve(world)
             else:
                 agent_cls = {"react": ReactCodeAgent, "fc": FunctionCallAgent}[self.config.agent]
                 kw = {}
                 if self.config.autofill_spend_total:
                     if self.config.agent != "fc":
                         raise ValueError("autofill_spend_total requires the fc actuator")
-                    # seeded from the same read-only lookup the rule scores against, so the
-                    # harness cannot be right for a reason the checker disagrees with
+
                     kw["autofill"] = SpendTotalAutofill(
                         baseline=dict(spend_totals.get("per_recipient", {})))
                 agent = agent_cls(self.llm, max_steps=self.config.max_steps,
                                   memory=memory, external_stats=external_stats,
                                   verbose=True, **kw)
-                agent_info = agent.solve(world)
+                with track_payment_outcomes(world.requester):
+                    agent_info = agent.solve(world)
             completed = bool(world.task_completed())
             try:
                 evaluation = world.evaluate().to_dict()
-            except Exception as exc:  # evaluation must never kill the stream
+            except Exception as exc:
                 evaluation = {"error": str(exc)}
             api_calls = [c for c in (resolve_call(dict(r))
                                      for r in world.requester.request_tracker.requests)
@@ -321,15 +272,11 @@ class SessionDriver:
             supervisor = dict(world.task.supervisor)
             instruction = world.task.instruction
         tgc = evaluation.get("success")
-        # Official TGC fails whenever a preference decorates a field AppWorld asserts exactly,
-        # so it cannot be compared across arms as-is; adjudicate now rather than leaving every
-        # run to need a scripts/rescore_tgc.py pass afterwards.
-        # tgc is None when evaluation itself failed; keep the relaxed verdict None too rather
-        # than reporting a decisive False for an episode that was never scored
+
         verdict = (adjudicate(evaluation, [r.name for r in self.persona.rules])
                    if tgc is not None else None)
         transcript = agent_info.pop("transcript", None)
-        if transcript is not None:  # raw LLM replies -> session dir (debugging relays etc.)
+        if transcript is not None:
             tdir = self.out_dir / "transcripts"
             tdir.mkdir(exist_ok=True)
             (tdir / f"{experiment_name}.json").write_text(json.dumps(
@@ -347,19 +294,8 @@ class SessionDriver:
 
     def _run_episode_self_gated(self, task_id: str, phase: str, session_index: int,
                                 experiment_name: str) -> EpisodeRecord:
-        """TRACE's gate: retry against the UPDATER's own compiled checks.
-
-        The distinction from the verifier gate is the source of the verdict. Here it is the
-        learner's own rules, mined from the complaints it has seen, so the arm gets no information
-        the other context-class arms lack -- it only gets to act on what it already believes
-        before finishing. Enforcing with `self.persona.check` instead would leak the ground truth
-        and turn this into a control-class arm.
-
-        A compiled check on a preference the task makes unsatisfiable would block forever, so the
-        loop is bounded and the last attempt is returned regardless. `self_gate_blocked` records
-        how many attempts its own rules rejected, which is what separates "the rules were
-        satisfied" from "the rules were never satisfiable".
-        """
+        """Retry using the updater's learned checks, with a fresh task world per attempt.
+        The persona checker is used only for subsequent evaluation, not for this gate."""
         gate = getattr(self.updater, "check", None)
         attempts = max(1, self.config.self_gate_attempts)
         ep = None
@@ -385,28 +321,17 @@ class SessionDriver:
 
     def _run_episode(self, task_id: str, phase: str, session_index: int,
                      experiment_name: str) -> EpisodeRecord:
-        """Episode with optional verifier gate: sample up to k attempts (fresh world
-        each time), accept the first one that passes the preference linter (a
-        control-class harness: deterministic checker in the call topology).
-
-        A clean attempt is not the same as an attempt with nothing to check. The habitual-card
-        gate exposed the difference: rejected on attempt 1, the agent spent attempt 2's whole
-        step budget re-reading the card list and never sent the payment, so no rule was
-        applicable, no rule was violated, and the naive loop accepted it -- the constraint
-        satisfied by declining to act, and the episode then dropped out of the denominator
-        instead of counting as a miss. So an attempt that skipped the constrained action is not
-        treated as compliance: retry, and if nothing better arrives prefer the attempt that
-        acted and failed over the one that dodged, which is the truthful record of what the gate
-        achieved. `escaped` counts the dodges for audit.
-        """
+        """Run up to the configured number of fresh-world attempts using the persona checker.
+        Accept the first applicable, compliant attempt. At exhaustion, prefer an acted
+        fallback when the last attempt contains no applicable action."""
         attempts = max(1, self.config.verifier_attempts)
         if attempts == 1 and self.config.self_gate_attempts > 1:
             return self._run_episode_self_gated(task_id, phase, session_index, experiment_name)
         ep = None
         linter_report = ""
-        acted_fallback = None   # best attempt that actually took the constrained action
+        acted_fallback = None
         escaped = 0
-        self._gate_lines: list[str] = []   # accumulated exclusions, oldest first
+        self._gate_lines: list[str] = []
         for attempt in range(1, attempts + 1):
             suffix = f"_a{attempt}" if attempts > 1 else ""
             ep = self._run_episode_once(task_id, phase, session_index,
@@ -419,19 +344,15 @@ class SessionDriver:
             acted = any(r.applicable for r in results)
             ep.meta["verifier_attempt"] = attempt
             if acted and not violations:
-                break                      # genuinely compliant: this is what the gate is for
+                break
             if acted:
-                acted_fallback = ep         # took the action and missed; keep as the honest record
+                acted_fallback = ep
             else:
                 escaped += 1
                 if not violations:
-                    # nothing to reject and nothing done -- retry rather than bank it as a pass
                     continue
             if self.config.verifier_feedback:
                 if self.config.verifier_accumulate:
-                    # One header over a growing bullet list. Concatenating whole reports instead
-                    # repeats "checker REJECTED the previous attempt" once per attempt, which
-                    # reads as several separate verdicts on the same try.
                     for line in self._report_lines(violations, ep):
                         if line not in self._gate_lines:
                             self._gate_lines.append(line)
@@ -442,7 +363,7 @@ class SessionDriver:
         if ep is not None and attempts > 1:
             if acted_fallback is not None and not any(
                     r.applicable for r in self.persona.check(ep, self.history)):
-                ep = acted_fallback     # never let a dodge outrank an attempt that acted
+                ep = acted_fallback
             ep.meta["gate_escapes"] = escaped
         return ep
 
@@ -452,7 +373,6 @@ class SessionDriver:
         for v in violations:
             line = self._correction_templates.get(v.rule, v.rule)
             if self.config.verifier_nonleaking and ep is not None:
-                # non-leaking channel: the rule describes the attempt, not the target
                 rule_obj = next((r for r in self.persona.rules if r.name == v.rule), None)
                 hint = rule_obj.gate_detail(ep, self.history) if rule_obj else ""
                 if hint:
@@ -487,13 +407,9 @@ class SessionDriver:
             "habit_target": self.history.habit_target,
             "first_card": self._first_card_bank(ep) if self._needs_card_names else None,
             "verifier_attempt": ep.meta.get("verifier_attempt"),
-            # How many fields the autofill harness actually rewrote. Needed to tell "the
-            # harness fixed it" apart from "the agent happened to be right": a 0.00 violation
-            # rate with zero rewrites means the arm never did anything.
+
             "autofill_repairs": len(ep.meta.get("agent", {}).get("autofill_repairs", [])),
-            # attempts where the gate had nothing to check because the constrained action never
-            # happened. A gate arm whose rate looks good on a shrunken denominator is explained
-            # by this column, so it travels with the numbers rather than being reconstructed.
+
             "gate_escapes": ep.meta.get("gate_escapes"),
             "rules": {r.rule: {"applicable": r.applicable, "satisfied": r.satisfied,
                                "detail": r.detail} for r in results},
@@ -503,7 +419,6 @@ class SessionDriver:
         self.rows.append(row)
         return row
 
-    # ---------------------------------------------------------------------- run
     def run(self) -> dict:
         cfg = self.config
         started = time.time()
@@ -513,9 +428,6 @@ class SessionDriver:
               f"= {self._total_episodes} episodes | agent={cfg.agent} llm={cfg.llm}", flush=True)
 
         def run_eval(n_seen: int) -> None:
-            # A backfilled checkpoint runs zero train episodes but must be recorded at the stream
-            # position whose memory it was given, or it lands at n=0 and reads as a second
-            # measurement of the empty-memory baseline.
             label = cfg.eval_label_n if cfg.eval_label_n is not None else n_seen
             stats = {"episodes": 0, "applicable": 0, "violations": 0, "tgc_pass": 0}
             for j, task_id in enumerate(cfg.eval_task_ids):
@@ -532,23 +444,17 @@ class SessionDriver:
                 self._progress(f"eval@n={label} {task_id} tgc={ep.tgc} violations={viol}")
             stats["violation_rate"] = (stats["violations"] / stats["applicable"]
                                        if stats["applicable"] else None)
-            eval_points[str(label)] = stats  # str keys: identical in memory and on disk
+            eval_points[str(label)] = stats
             print(f"  == checkpoint n={label}: violation_rate="
                   f"{stats['violation_rate']} tgc={stats['tgc_pass']}/{stats['episodes']} ==",
                   flush=True)
-            # dump what was ACTUALLY injected at this checkpoint, not the updater's
-            # state: for oracle/fulllog/fixed arms the updater is a no-op, so dumping
-            # render_memory() wrote an empty file and left no record of the context
+
             (self.out_dir / f"memory_n{label}.md").write_text(self._current_memory())
             if self.config.inject_stats:
                 (self.out_dir / f"stats_n{label}.md").write_text(
                     self.habit.external_stats() if self.habit
                     else self.history.render_external_stats())
 
-        # --- family B: habit-observation sweep instead of an AppWorld task stream ---
-        # The habit stream is synthetic micro-rounds (zero LLM cost, same construction as
-        # the skill-selection paper's synthetic user); the x-axis is observations, not
-        # episodes. All arms see the identical stream; only the harness differs.
         if self.habit is not None and cfg.habit_schedule:
             print(f"  habit stream: dominant={cfg.habit_dominant} tier={cfg.habit_tier} "
                   f"target={self.habit.target()} schedule={cfg.habit_schedule}", flush=True)
@@ -567,8 +473,7 @@ class SessionDriver:
             ep = self._run_episode(task_id, phase="train", session_index=i,
                                    experiment_name=f"apw_p_{cfg.run_name}_train{i}")
             results = self.persona.check(ep, self.history)
-            # rules_by_name is only read by the vague_scoped tier, which derives its scope hint
-            # from each violated rule's trigger_actions rather than from authored per-rule text.
+
             feedback = make_feedback(results, tier=cfg.feedback_tier,
                                      correction_templates=self._correction_templates,
                                      rules_by_name={r.name: r for r in self.persona.rules})

@@ -48,10 +48,10 @@ What the user said about it:
 class Assertion:
     """One generated memory line, plus the provenance the harness needs and the learner
     never sees."""
-    rule_name: str          # which persona rule the complaint came from
-    text: str               # what the learner wrote
-    episode_index: int      # 1-based position in the interaction stream
-    complaint: str          # the instance-tier line it was induced from
+    rule_name: str
+    text: str
+    episode_index: int
+    complaint: str
 
 
 def render_actions(ep: EpisodeRecord, max_calls: int = 12) -> str:
@@ -59,7 +59,7 @@ def render_actions(ep: EpisodeRecord, max_calls: int = 12) -> str:
     lines = []
     for call in ep.api_calls[:max_calls]:
         if call.method and call.method.lower() == "get":
-            continue        # reads carry no preference signal
+            continue
         args = {k: v for k, v in (call.arguments or {}).items()
                 if not re.search(r"token|password|session", str(k), re.I)}
         lines.append(f"- {call.app}.{call.api}({json.dumps(args, default=str)[:400]})")
@@ -73,7 +73,7 @@ def induce_assertion(llm: BaseLLM, ep: EpisodeRecord, complaint: str) -> str:
         [{"role": "user", "content": USER_TEMPLATE.format(
             instruction=ep.instruction, actions=render_actions(ep), complaint=complaint)}],
         max_tokens=200, temperature=0.7)
-    # Keep the first non-empty line; strip bullets/quotes the model may add anyway.
+
     for line in text.strip().splitlines():
         line = line.strip().lstrip("-*• ").strip().strip('"')
         if line:
@@ -82,13 +82,7 @@ def induce_assertion(llm: BaseLLM, ep: EpisodeRecord, complaint: str) -> str:
 
 
 class AssertionCollector(BaseUpdater):
-    """Collects the candidate pool online; memory stays empty during collection.
-
-    Generation is online (the learner induces from each complaint as it arrives, with only
-    the episodes it has seen), but the L-sweep selects from the finished pool offline. Left
-    fully online, memory length would grow with experience and L would be inseparable from
-    n; and build_memory()'s nesting guarantee -- raising L only ADDS lines -- would be lost.
-    """
+    """Collect assertions online from instance feedback while keeping execution memory empty."""
 
     def __init__(self, llm: BaseLLM):
         self.llm = llm
@@ -101,7 +95,7 @@ class AssertionCollector(BaseUpdater):
         complaints = [ln.lstrip("- ").strip() for ln in feedback.text.splitlines()
                       if ln.startswith("- ")]
         written = []
-        # provenance is positional: complaint i came from provenance[i] (feedback.py)
+
         for rule_name, complaint in zip(feedback.provenance, complaints):
             text = induce_assertion(self.llm, ep, complaint)
             if not text:
@@ -112,7 +106,7 @@ class AssertionCollector(BaseUpdater):
                             "accepted": feedback.accepted, "written": written})
 
     def render_memory(self) -> str:
-        return ""           # fixed data-collection policy: empty memory while collecting
+        return ""
 
     def state(self) -> dict:
         return {"assertions": len(self.assertions), "episodes": self._index}

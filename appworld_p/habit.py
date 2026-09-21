@@ -1,27 +1,7 @@
-"""Family-B habit stream: the statistical-aggregation out-of-support construction.
-
-The user has a biased-random habit pi_u over K interchangeable options (Venmo payment
-cards, identified by bank name so the vocabulary is stable across AppWorld worlds).
-Each micro-round the driver samples the option the user *wanted today*, the agent-ish
-exploration actually *used* one, and the user reacts. The reaction tier is the q knob:
-
-  corrective — the wanted option is named        ("I wanted my Amex card for that")
-  binary     — only used-option + ok/unhappy     (never names the wanted option)
-
-Both tiers emit the SAME observations; they differ only in how much of each round is
-revealed. Under information parity every harness sees this one log; the two classes
-differ only in the computation applied to it:
-
-  context class (full-log arm) — the whole log goes into the prompt, f must aggregate
-                                 inside its forward pass
-  control class (external arm) — a deterministic per-option acceptance-rate counter
-                                 runs outside f and injects its argmax
-
-Pilot verdict (haiku + FC actuator, 2026-07-16): corrective tier is in-support (mode
-recovered 3/3, survives noise / conditional decoys / brand-prior flip), binary tier is
-out-of-support (first choice scatters at chance while the counter recovers the mode).
-See refine-logs/Q1_REDESIGN.md section 3.5.
-"""
+"""Synthetic habit observations for the habitual-card comparison.
+Each observation records a sampled card and binary user feedback.
+The context arm receives the raw log; the control arm computes per-card acceptance rates.
+Observation count is separate from the number of AppWorld evaluation episodes."""
 
 import json
 import random
@@ -29,22 +9,19 @@ from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 
-# Bank names present in every eval world of the card-payment task family (audited by
-# scripts/audit_cards.py). Biased-random single setting, per the author's decision.
+
 DEFAULT_PI_U: dict[str, float] = {
     "American Express": 0.65,
     "Wells Fargo": 0.25,
     "Chase": 0.10,
 }
 
-# Card names shared by all 6 Venmo-payment eval worlds (scripts/audit_cards.py: each
-# world exposes a random 4-5 subset of 7 banks, so the vocabulary must be pinned).
+
 FAMILY_B_OPTIONS = ("American Express", "Wells Fargo", "Chase")
 FAMILY_B_EVAL_TASKS = ("37a8675_2", "37a8675_3", "530b157_2",
                        "60d0b5b_1", "60d0b5b_2", "60d0b5b_3")
 
-# The dominant option rotates with the seed: the brand-prior flip control (the pilot's
-# targets were coincidentally all Amex) is thereby built into the main experiment.
+
 PI_U_SHAPE = (0.65, 0.25, 0.10)
 
 
@@ -56,12 +33,7 @@ def pi_u_for(dominant: str, options: tuple[str, ...] = FAMILY_B_OPTIONS) -> dict
     return {dominant: PI_U_SHAPE[0],
             **{o: p for o, p in zip(rest, PI_U_SHAPE[1:])}}
 
-# Unrelated interaction lines. Dilution is the family-B hardness knob that separates
-# COMPUTATION from STATISTICS: noise leaves the counter's estimate bit-identical (it
-# filters by pattern first), while in-context aggregation must find the ~n signal lines
-# inside a log of n*(1+density) before it can count anything. Tightening pi_u instead
-# would degrade both classes at once (simulated 2026-07-20: at (.40,.32,.28) the counter
-# itself only reaches 0.91 at n=360), which is exactly the confound to avoid.
+
 NOISE_TEMPLATES = (
     "spotify | added {k} songs to playlist | user: ok",
     "spotify | liked {k} songs | user: ok",
@@ -83,9 +55,9 @@ NOISE_TEMPLATES = (
 @dataclass
 class HabitRound:
     index: int
-    wanted: str        # option the user wanted (driver-side ground truth)
-    used: str          # option the exploration actually used
-    accepted: bool     # used == wanted
+    wanted: str
+    used: str
+    accepted: bool
 
     def render(self, tier: str) -> str:
         """One structured log line — the legitimate channel, identical for all arms."""
@@ -109,35 +81,31 @@ class HabitStream:
     tier: str = "binary"
     seed: int = 0
     noisy: bool = False
-    noise_per_round: float = 1.0     # mean unrelated lines per habit round (dilution)
+    noise_per_round: float = 1.0
     rounds: list[HabitRound] = field(default_factory=list)
     _noise: dict[int, list[str]] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         self._rng = random.Random(self.seed)
-        # noise gets its OWN generator: turning noise on must not perturb the habit
-        # process, otherwise the clean/noisy comparison changes two things at once
+
         self._noise_rng = random.Random(self.seed + 999_983)
         self._options = list(self.pi_u)
         self._weights = [self.pi_u[o] for o in self._options]
 
-    # ---------------------------------------------------------------- process
     def advance(self, target_rounds: int) -> None:
         """Sample micro-rounds until len(rounds) == target_rounds (no LLM cost)."""
         while len(self.rounds) < target_rounds:
             i = len(self.rounds) + 1
             wanted = self._rng.choices(self._options, self._weights)[0]
-            used = self._rng.choice(self._options)   # exploratory usage, uniform
+            used = self._rng.choice(self._options)
             self.rounds.append(HabitRound(i, wanted, used, used == wanted))
             if self.noisy and self.noise_per_round > 0:
-                # uniform on [0, 2*density] -> mean == density
                 hi = int(round(2 * self.noise_per_round))
                 self._noise[i] = [
                     self._noise_rng.choice(NOISE_TEMPLATES).format(
                         k=self._noise_rng.randint(1, 9))
                     for _ in range(self._noise_rng.randint(0, hi))]
 
-    # ------------------------------------------------------- ground truth / target
     def wanted_counts(self) -> Counter:
         return Counter(r.wanted for r in self.rounds)
 
@@ -156,7 +124,6 @@ class HabitStream:
         top = max(counts.values())
         return sorted(o for o, c in counts.items() if c == top)[0]
 
-    # -------------------------------------------------------------- context class
     def render_log(self) -> str:
         """Full structured log — the information upper bound of the context class."""
         if not self.rounds:
@@ -168,7 +135,6 @@ class HabitStream:
             lines.append(r.render(self.tier))
         return "\n".join(lines)
 
-    # -------------------------------------------------------------- control class
     def acceptance_rates(self) -> dict[str, tuple[int, int]]:
         """Per-option (accepts, uses) — computable from the log by a counter, in both
         tiers. This is the credit-assignment statistic f fails to do in-context."""
@@ -201,7 +167,6 @@ class HabitStream:
                 f"{len(self.rounds)} past card payments): " + ", ".join(parts) +
                 f"\n=> the user's usual card is the {self.counter_argmax()} card.")
 
-    # -------------------------------------------------------------- bookkeeping
     def state(self) -> dict:
         return {"rounds": len(self.rounds), "tier": self.tier,
                 "wanted_counts": dict(self.wanted_counts()),

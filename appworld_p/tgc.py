@@ -1,37 +1,13 @@
-"""Relaxed TGC: official task success, excusing only failures caused by preference decoration.
-
-Official TGC and preference compliance are mechanically opposed. AppWorld asserts exact
-equality on the very fields our rules decorate, so on q1main episodes that satisfied
-sms_char_checksum passed official TGC 0/28 times -- and --tgc-condition therefore deleted
-every treatment arm and kept only baseline, selecting for violations.
-
-This module does NOT reimplement or patch AppWorld. It runs the official evaluator
-unchanged, then adjudicates its per-requirement failures: a failure is excused only if the
-assertion is on a field an active rule owns AND, after that rule strips its own decoration,
-the official exact-equality check passes. So
-
-    'Done. #5'                  vs 'Done.'          -> excused (strips to 'Done.')
-    'Done. Also I hate you. #5' vs 'Done.'          -> NOT excused ('Done. Also I hate you.')
-    amount / id / count mismatches                  -> NOT excused, non-string operands
-
-Stripping rather than bare containment matters: 'Done.' IS a substring of
-'Done. Also I hate you. #5', so containment alone would excuse a genuine task failure where
-the agent added prose. Containment survives only as a flagged fallback for a claimed field
-whose rule has no strip function.
-
-relaxed_success = official_success or (there was >=1 failure and all of them are excused)
-
-Because containment is strictly weaker than equality, relaxed >= official per episode
-always; assert_monotonic() encodes that as a checkable invariant.
-"""
+"""Internal task-completion diagnostics.
+Run the official evaluator and separately adjudicate preference-owned text decorations.
+These diagnostics are not the paper's reported preference-violation metric."""
 from __future__ import annotations
 
 import ast
 import re
 from dataclasses import dataclass, field
 
-# rule -> the API param it writes, as the token that appears in AppWorld's requirement text
-# ("assert the added transaction has description public_data.note.").
+
 RULE_HOST_PARAM = {
     "private_note_format": "description",
     "payment_has_note": "description",
@@ -46,34 +22,18 @@ RULE_HOST_PARAM = {
     "note_tags_required": "tags",
 }
 
-# Only additive decoration can be excused by containment. A rule that rewrites or shortens
-# the field makes the official expected value a non-substring, so containment cannot (and
-# must not) rescue it. private_note_format wraps the original text in
-# '[<code>|<date>|<summary>]' and all 33 real venmo notes in train+dev are <=6 words, so the
-# original survives verbatim in the summary slot -- additive in practice.
+
 ADDITIVE_RULES = frozenset({
     "private_note_format", "payment_has_note", "txn_running_count",
     "sms_char_checksum", "sms_checksum", "sms_signoff",
     "email_greeting_signoff", "note_title_dated", "note_tags_required",
 })
 
-# AppWorld renders a failed comparison inline ("AssertionError:  'a #5' == 'a'") for short
-# values but breaks it across lines when they are long:
-#     AssertionError:
-#     'make an account on venmo please. #5'
-#     ==
-#     'make an account on venmo please.'
-# Only handling the inline form left genuinely excusable failures unexcused, so both layouts
-# are parsed. Everything after "Original values:" is the pre-normalization pair, which we
-# ignore: the normalized pair is what the official assertion actually compared.
+
 _ASSERT_RE = re.compile(r"^AssertionError:[ \t]*(.*?)(?=^Original values:|\Z)",
                         re.MULTILINE | re.DOTALL)
 
-# Bare containment over-excuses: 'Done.' is a substring of 'Done. Also I hate you. #5', so a
-# real task failure (the agent added prose) would be waved through. Instead each rule strips
-# its OWN decoration and the official exact-equality check is re-applied to the remainder --
-# same judgement AppWorld would have made had the preference never existed. Containment is
-# only the fallback for a claimed field with no strip function, and it is recorded as such.
+
 _SMS_CHECKSUM_SUFFIX = re.compile(r"\s*#\s*\d+\s*$")
 _PRIVATE_NOTE = re.compile(r"^\s*\[[^|\]]*\|[^|\]]*\|(?P<summary>[^\]]*)\]\s*$")
 
@@ -87,8 +47,6 @@ def _strip_private_note(text: str) -> str:
     return m.group("summary").strip() if m else text.strip()
 
 
-# 'Dinner total: $1178' -> 'Dinner'. Anchored at the end and requiring the literal 'total:'
-# so an ordinary note that merely mentions a dollar figure is not silently truncated.
 _SPEND_TOTAL_SUFFIX = re.compile(r"[\s,;.]*total:\s*\$?[0-9]+(?:\.[0-9]{1,2})?\s*$", re.I)
 
 
@@ -100,7 +58,7 @@ STRIP_DECORATION = {
     "sms_char_checksum": _strip_sms_checksum,
     "sms_checksum": _strip_sms_checksum,
     "private_note_format": _strip_private_note,
-    "txn_running_count": _strip_sms_checksum,  # same '#<n>' suffix shape
+    "txn_running_count": _strip_sms_checksum,
     "spend_total_per_recipient": _strip_spend_total,
     "spend_total_all_time": _strip_spend_total,
 }
@@ -111,9 +69,9 @@ class Verdict:
     """Adjudication of one episode's official evaluation."""
     official: bool
     relaxed: bool
-    excused: list[str] = field(default_factory=list)   # requirements excused as decoration
-    unexcused: list[str] = field(default_factory=list)  # requirements that still fail
-    notes: list[str] = field(default_factory=list)      # why something could not be excused
+    excused: list[str] = field(default_factory=list)
+    unexcused: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
 
 
 def _split_comparison(block: str) -> tuple[object, object] | None:
@@ -124,12 +82,10 @@ def _split_comparison(block: str) -> tuple[object, object] | None:
     """
     block = block.strip()
     lines = [l for l in (x.strip() for x in block.splitlines()) if l]
-    if "==" in lines:  # multi-line layout: left / "==" / right
+    if "==" in lines:
         i = lines.index("==")
         head, tail = "\n".join(lines[:i]), "\n".join(lines[i + 1:])
     elif " == " in block:
-        # split on the LAST " == " so a decorated value containing " == " does not mislead;
-        # AppWorld renders the expected value on the right
         head, _, tail = block.rpartition(" == ")
     else:
         return None
@@ -164,7 +120,7 @@ def _contains(actual: object, expected: object) -> tuple[bool, str]:
     if not isinstance(expected, str) or not expected.strip():
         return False, f"expected is not a non-empty string ({type(expected).__name__})"
     exp = expected.strip()
-    # "all ==" assertions put a list on the left: every element must still contain expected
+
     actuals = actual if isinstance(actual, (list, tuple)) else [actual]
     if not actuals:
         return False, "no actual value"
@@ -208,7 +164,6 @@ def _judge(actual: object, expected: object, rules: list[str]) -> tuple[bool, st
 
     strippers = [STRIP_DECORATION[r] for r in rules if r in STRIP_DECORATION]
     if strippers:
-        # every element must reduce to the expected value under at least one rule's strip
         for a in actuals:
             if not any(strip(a) == exp for strip in strippers):
                 return False, f"differs after removing decoration: {a.strip()[:60]!r}"
@@ -236,8 +191,7 @@ def adjudicate(evaluation: dict, rule_names) -> Verdict:
 
     for f in failures:
         req = str(f.get("requirement", "")).strip()
-        # the requirement text names the asserted field, e.g.
-        # "assert the added transaction has description public_data.note."
+
         claiming = [r for p, rs in params.items()
                     if re.search(rf"\b{re.escape(p)}\b", req) for r in rs]
         if not claiming:

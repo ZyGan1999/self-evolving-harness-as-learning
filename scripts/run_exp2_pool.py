@@ -1,18 +1,4 @@
-"""Exp 2 (Q2) online pool collection: the learner INDUCES its own memory lines.
-
-Differs from run_exp2_collect.py in what memory is made of. There, memory lines were
-oracle_text / negation_text -- hand-written, calibrated to 1.00 compliance -- so L > d had
-to be filled with distractor rules. Here every line is written by the learner from an
-instance-tier complaint, so all L lines describe the same d preferences and no distractor
-bank is involved: L > d is redundancy about the persona, not contamination from outside it.
-
-Memory stays empty during collection (fixed data-collection policy), so the pool is a
-function of the stream only. The L-sweep then selects from the finished pool offline.
-
-Usage:
-  python scripts/run_exp2_pool.py --llm anthropic:claude-haiku-4-5-20251001 \
-      --persona p6_q2 --n-train 32 [--seed 1] [--tag _v1]
-"""
+"""Collect Q2 preference assertions from instance-level feedback with empty execution memory."""
 
 import argparse
 import json
@@ -32,14 +18,14 @@ from appworld_p.summarize import AssertionCollector  # noqa: E402
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--llm", required=True)
-    parser.add_argument("--persona", default="p6_q2")
+    parser.add_argument("--persona", default="p8_q2s1")
     parser.add_argument("--max-steps", type=int, default=50)
     parser.add_argument("--agent", default="fc", choices=["fc", "react"])
     parser.add_argument("--n-train", type=int, default=32)
-    parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument("--tag", default="")
-    # The learner that writes memory. Same model as the agent by default: a stronger
-    # summariser would be a different harness, not a different L.
+    parser.add_argument("--seed", type=int, default=1)
+    parser.add_argument("--tag", default="_v1")
+
+
     parser.add_argument("--learner-llm", default="")
     args = parser.parse_args()
 
@@ -56,8 +42,8 @@ def main() -> None:
         eval_task_ids=[], checkpoints=[],
         agent=args.agent, llm=args.llm, seed=args.seed,
         max_steps=args.max_steps,
-        feedback_tier="instance",     # complaint about THIS episode, no general rule given
-        memory_mode="updater",        # AssertionCollector renders "" -> fixed policy
+        feedback_tier="instance",
+        memory_mode="updater",
         notes="exp2 online pool collection (learner-induced assertions, instance feedback)",
     )
     SessionDriver(config, collector).run()
