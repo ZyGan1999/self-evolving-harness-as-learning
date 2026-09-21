@@ -164,7 +164,7 @@ class PaymentHasNote(Rule):
 
     def satisfied(self, ep, history):
         for call in find_actions(ep, "venmo_payment"):
-            note = call.arg("description", "note", "memo")
+            note = call.arg("description")
             if not note or not str(note).strip():
                 return False, "venmo payment without description"
         return True, ""
@@ -352,7 +352,7 @@ class PaymentNoteInitials(Rule):
 
     def satisfied(self, ep, history):
         for call in find_actions(ep, "venmo_payment"):
-            note = str(call.arg("description", "note", "memo", default="")).strip()
+            note = str(call.arg("description", default="")).strip()
 
             if not INITIALS_SUFFIX_RE.search(note):
                 return False, f"note lacks initials suffix: {note[-30:]!r}"
@@ -414,7 +414,7 @@ class PaymentNoteCategoryPrefix(Rule):
 
     def satisfied(self, ep, history):
         for call in find_actions(ep, "venmo_payment"):
-            note = str(call.arg("description", "note", "memo", default="")).strip()
+            note = str(call.arg("description", default="")).strip()
             if not note.lower().startswith("[personal]"):
                 return False, f"note lacks the category tag: {note[:30]!r}"
         return True, ""
@@ -438,7 +438,7 @@ class PaymentNoteSingleWord(Rule):
 
     def satisfied(self, ep, history):
         for call in find_actions(ep, "venmo_payment"):
-            note = str(call.arg("description", "note", "memo", default="")).strip()
+            note = str(call.arg("description", default="")).strip()
             if word_count(note) != 1:
                 return False, f"note is not a single word: {note[:40]!r}"
         return True, ""
@@ -463,7 +463,7 @@ class PaymentNoteNoBrackets(Rule):
 
     def satisfied(self, ep, history):
         for call in find_actions(ep, "venmo_payment"):
-            note = str(call.arg("description", "note", "memo", default=""))
+            note = str(call.arg("description", default=""))
             if any(ch in note for ch in "[]()"):
                 return False, f"note contains brackets: {note[:40]!r}"
         return True, ""
@@ -562,7 +562,7 @@ class PaymentNoteLowercase(Rule):
 
     def satisfied(self, ep, history):
         for call in find_actions(ep, "venmo_payment"):
-            note = str(call.arg("description", "note", "memo", default=""))
+            note = str(call.arg("description", default=""))
             if note != note.lower():
                 return False, f"note is not all lowercase: {note[:40]!r}"
         return True, ""

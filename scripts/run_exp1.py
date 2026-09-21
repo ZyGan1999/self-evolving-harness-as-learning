@@ -20,8 +20,7 @@ from appworld_p.streams import build_stream  # noqa: E402
 from appworld_p.updaters import AssertionTopL, NoOpUpdater, build_candidate_bank  # noqa: E402
 
 STATIC_ARMS = {"baseline", "oracle1", "oracle_verifier",
-               "oracle_verifier_value", "oracle_autofill",
-               "oracle_stats"}
+               "oracle_verifier_value", "oracle_autofill"}
 STREAM_ARMS = {"learned"}
 
 
@@ -50,12 +49,6 @@ def arm_config(arm: str, run_name: str, persona_path: str, pool: dict,
                              memory_mode="oracle", oracle_verbosity=1,
                              verifier_detail=True,
                              verifier_attempts=args.verifier_attempts, **base), NoOpUpdater()
-    if arm == "oracle_stats":
-
-
-        return SessionConfig(stream_task_ids=[], checkpoints=[0],
-                             memory_mode="oracle", oracle_verbosity=1,
-                             inject_spend_totals=True, **base), NoOpUpdater()
     if arm == "oracle_autofill":
 
 

@@ -35,7 +35,6 @@
     "learned",
     "oracle_verifier",
     "oracle_verifier_value",
-    "oracle_stats",
     "oracle_autofill"
   ]
 }

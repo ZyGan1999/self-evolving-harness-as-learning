@@ -38,7 +38,7 @@ class PrivateNoteFormat(Rule):
 
     def satisfied(self, ep, history):
         for call in find_actions(ep, "venmo_payment"):
-            note = str(call.arg("description", "note", "memo", default=""))
+            note = str(call.arg("description", default=""))
             m = PRIVATE_NOTE_RE.match(note.strip())
             if not m:
                 return False, f"note not in private format: {note!r}"
@@ -168,7 +168,7 @@ class TxnRunningCount(Rule):
     def satisfied(self, ep, history: SessionHistory):
         count = history.payment_count
         for i, call in enumerate(find_actions(ep, "venmo_payment"), start=1):
-            note = str(call.arg("description", "note", "memo", default=""))
+            note = str(call.arg("description", default=""))
             m = re.search(r"txn #(\d+)\s*$", note)
             if not m:
                 return False, f"note lacks running count: {note!r}"

@@ -50,24 +50,25 @@ def arm_config(arm: str, run_name: str, persona_path: str,
 
 
 def summarize(run_name: str) -> dict:
-    """Family-B readout: per-n share of episodes whose FIRST card is the habit."""
+    """Per-checkpoint habitual-card violations over applicable evaluation episodes."""
     path = OUTPUTS_DIR / "sessions" / run_name / "episodes.jsonl"
     rows = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
     by_n: dict[str, dict] = {}
-    for r in rows:
-        slot = by_n.setdefault(str(r["n"]), {"episodes": 0, "hits": 0, "tgc": 0,
-                                             "no_card": 0, "cards": {}})
-        rule = r["rules"].get("usual_card", {})
+    for row in rows:
+        if row.get("phase") != "eval":
+            continue
+        slot = by_n.setdefault(str(row["n"]), {
+            "episodes": 0, "applicable": 0, "violations": 0,
+        })
         slot["episodes"] += 1
-        slot["tgc"] += int(bool(r["tgc"]))
-        slot["hits"] += int(rule.get("satisfied") is True and rule.get("applicable"))
-        card = r.get("first_card")
-        if card is None:
-            slot["no_card"] += 1
-        else:
-            slot["cards"][card] = slot["cards"].get(card, 0) + 1
+        rule = row["rules"].get("usual_card", {})
+        if rule.get("applicable"):
+            slot["applicable"] += 1
+            slot["violations"] += int(rule.get("satisfied") is False)
     for slot in by_n.values():
-        slot["hit_rate"] = round(slot["hits"] / slot["episodes"], 3) if slot["episodes"] else None
+        slot["violation_rate"] = (
+            slot["violations"] / slot["applicable"] if slot["applicable"] else None
+        )
     return by_n
 
 
@@ -120,10 +121,17 @@ def main() -> None:
 
     print(f"\n=== exp1b: target={args.dominant} tier={args.tier} seed={args.seed} ===")
     ns = [str(n) for n in args.schedule]
-    print(f"{'arm':10s} " + " ".join(f"{'n=' + n:>9s}" for n in ns))
+    print("Habitual-card violation rate (violations/applicable)")
+    print(f"{'arm':10s} " + " ".join(f"{'n=' + n:>18s}" for n in ns))
     for arm, res in index["arms"].items():
-        cells = [f"{res['by_n'][n]['hit_rate']:>9.2f}" if n in res["by_n"] else f"{'-':>9s}"
-                 for n in ns]
+        cells = []
+        for n in ns:
+            point = res["by_n"].get(n)
+            if point is None or point["violation_rate"] is None:
+                cells.append(f"{'--':>18s}")
+            else:
+                cell = f"{point['violation_rate']:.3f} ({point['violations']}/{point['applicable']})"
+                cells.append(f"{cell:>18s}")
         print(f"{arm:10s} " + " ".join(cells))
     print(f"\nWrote {out}")
 

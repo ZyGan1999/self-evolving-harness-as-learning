@@ -12,7 +12,7 @@ The language model is held fixed within each experiment. We vary only the local 
 | **Q2: generalization** | How does the number of learned memory statements, \(L\), affect preference violations? | Nine memory lengths under constant full relevance |
 | **Q3: optimization** | Does a self-evolving memory reach the oracle, or plateau above it? | ACE-style updates, static references, and memory-update baselines |
 
-The primary metric is preference violation rate on a frozen evaluation set.
+The primary metric is preference violation rate on a frozen evaluation set. Payment-note checks read the Venmo API description field.
 
 ## Repository layout
 
@@ -116,7 +116,7 @@ for seed in 0 1 2; do
     --llm anthropic:claude-haiku-4-5-20251001 \
     --persona q1_signoff_running_total --agent fc \
     --arms baseline oracle1 learned oracle_verifier oracle_verifier_value \
-           oracle_stats oracle_autofill \
+           oracle_autofill \
     --n-train 6 --checkpoints 0 3 6 --n-eval 6 --max-steps 60 \
     --seed "$seed" --tag _q1cross
 done
@@ -131,6 +131,10 @@ for dominant in "American Express" Chase "Wells Fargo"; do
     --attempts 3 --n-eval 6 --max-steps 30 --seed 0 --tag _m1
 done
 ```
+
+The habitual-card runner reports per-checkpoint violations, applicable episodes,
+and their ratio for the usual-card preference. To combine the three card-brand
+rotations, sum violations and applicable counts before taking the ratio.
 
 ## Q2: memory length
 

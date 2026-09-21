@@ -63,20 +63,6 @@ print([round(sum(float(t['amount']) for t in _sent), 2), len(_sent), _per])
 """
 
 
-def render_spend_stats(spend_totals: dict) -> str:
-    """Render read-only ledger statistics for the model.
-    The model remains responsible for constructing the payment description."""
-    per = spend_totals.get("per_recipient") or {}
-    if not per:
-        return ""
-    lines = ["Ledger maintained for you (Venmo money you have already sent, before this task):"]
-    for email, amount in sorted(per.items(), key=lambda kv: -kv[1]):
-        lines.append(f"  {email}: ${amount:g} sent so far")
-    lines.append(f"Across all recipients: ${spend_totals.get('total', 0):g} in "
-                 f"{spend_totals.get('count', 0)} payments.")
-    lines.append("These figures EXCLUDE anything you send during this task. If you pay someone "
-                 "twice here, the second payment's cumulative figure must include the first.")
-    return "\n".join(lines)
 
 
 def read_spend_totals(world) -> dict:
@@ -148,8 +134,6 @@ class SessionConfig:
     habit_noisy: bool = False
     habit_noise_per_round: float = 1.0
     habit_schedule: list[int] = field(default_factory=list)
-
-    inject_spend_totals: bool = False
 
     autofill_spend_total: bool = False
 
@@ -241,9 +225,6 @@ class SessionDriver:
                       ground_truth_mode="full", raise_on_failure=False) as world:
             card_names = read_card_names(world) if self._needs_card_names else {}
             spend_totals = read_spend_totals(world) if self._needs_spend_totals else {}
-            if self.config.inject_spend_totals:
-                external_stats = "\n\n".join(
-                    x for x in (external_stats, render_spend_stats(spend_totals)) if x)
             if self.config.agent == "oracle":
                 with track_payment_outcomes(world.requester):
                     agent_info = OracleAgent().solve(world)
