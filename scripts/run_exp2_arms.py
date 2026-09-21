@@ -37,7 +37,7 @@ def score_run(run_name: str, rule_names: list[str]) -> dict:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--llm", required=True)
-    ap.add_argument("--persona", default="p8_q2s1")
+    ap.add_argument("--persona", default="q2_memory_scale")
     ap.add_argument("--arms", nargs="+", default=["R"], choices=["R"])
     ap.add_argument("--l-values", nargs="+", type=int,
                     default=[0, 1, 2, 3, 5, 10, 20, 60, 150])

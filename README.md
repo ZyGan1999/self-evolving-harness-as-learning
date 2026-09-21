@@ -24,6 +24,17 @@ scripts/             Experiment runners and analysis utilities
 ```
 
 
+## Personas
+
+| Persona | Experiment |
+|---|---|
+| q1_format_checksum | Q1: private note format and SMS character checksum |
+| q1_signoff_running_total | Q1: SMS sign-off and per-recipient running spend total |
+| q1_habitual_card | Q1: habitual-card comparison with synthetic habit observations |
+| q2_memory_scale | Q2: memory-length sweep over eight preferences |
+| q3_self_evolution | Q3: self-evolution over five jointly satisfiable preferences |
+
+
 ## Installation
 
 Python 3.11 is recommended.
@@ -51,24 +62,24 @@ Experiment sessions are not distributed. Before the first run, deterministically
 
 ```bash
 python scripts/build_task_pool.py \
-  --max-difficulty 3 --only p4_q1 p5_q1b p13_mixed
+  --max-difficulty 3 --only q1_format_checksum q1_signoff_running_total q3_self_evolution
 
 python scripts/build_task_pool.py \
-  --from-cache --max-difficulty 2 --only p8_q2s1
+  --from-cache --max-difficulty 2 --only q2_memory_scale
 ```
 
 The default pool seed is 13 and the default difficulty limit is 3. The first
-command reproduces the Q1 main split (eight training tasks, seven evaluation
-tasks) and loads the frozen Q1 crossover and Q3 splits from configs/experiments/.
+command loads the frozen Q1 and Q3 splits from configs/experiments/. The Q1
+format/checksum split contains eight training and seven evaluation tasks.
 The crossover uses six training and six evaluation tasks. Q3 uses nine training
 and six evaluation tasks with no shared template families: evaluation has three
 phone tasks from 0d8a4ee and three Venmo tasks from 37a8675; training uses
 29caf6f, 60d0b5b, and 530b157. For these frozen splits, seed and greedy coverage
 settings do not change the task lists; missing or ineligible tasks raise an error.
 
-The second command preserves those pools and builds the Q2 task
-pool at its original difficulty limit of 2. The habitual-card runner uses its
-own six fixed evaluation tasks and does not require a p3_fc task pool.
+The second command preserves those pools and loads the frozen Q2 task
+split, checking eligibility at its original difficulty limit of 2. The habitual-card runner uses its
+own six fixed evaluation tasks and does not require a q1_habitual_card task pool.
 The initial metadata scan may take approximately 30 minutes; the second command
 reuses the cache.
 
@@ -93,7 +104,7 @@ The five reported Q1 preference panels come from three experimental configuratio
 for seed in 0 1 2 3 4 5; do
   python scripts/run_exp1.py \
     --llm anthropic:claude-haiku-4-5-20251001 \
-    --persona p4_q1 --agent fc \
+    --persona q1_format_checksum --agent fc \
     --arms baseline oracle1 learned oracle_verifier oracle_verifier_value \
     --n-train 8 --checkpoints 0 4 8 --n-eval 7 --max-steps 50 \
     --seed "$seed" --tag _q1main
@@ -103,7 +114,7 @@ done
 for seed in 0 1 2; do
   python scripts/run_exp1.py \
     --llm anthropic:claude-haiku-4-5-20251001 \
-    --persona p5_q1b --agent fc \
+    --persona q1_signoff_running_total --agent fc \
     --arms baseline oracle1 learned oracle_verifier oracle_verifier_value \
            oracle_stats oracle_autofill \
     --n-train 6 --checkpoints 0 3 6 --n-eval 6 --max-steps 60 \
@@ -114,7 +125,7 @@ done
 for dominant in "American Express" Chase "Wells Fargo"; do
   python scripts/run_exp1b.py \
     --llm anthropic:claude-haiku-4-5-20251001 \
-    --persona p3_fc --agent fc \
+    --persona q1_habitual_card --agent fc \
     --arms baseline oracle fulllog external gate \
     --dominant "$dominant" --schedule 0 20 60 120 \
     --attempts 3 --n-eval 6 --max-steps 30 --seed 0 --tag _m1
@@ -125,14 +136,14 @@ done
 
 The R arm requires only the target assertion pools; no donor collection is needed.
 The six-rule diagnostic re-scores the same episodes, excluding SMS terseness and
-payment-note presence. The reported Q2 result uses the `p8_q2s1` R arm. Every injected statement concerns a scored preference, keeping relevance fixed at 1.0. The sweep uses nine lengths, three evaluation seeds, 12 tasks per cell, and 10 rollouts per task.
+payment-note presence. The reported Q2 result uses the `q2_memory_scale` R arm. Every injected statement concerns a scored preference, keeping relevance fixed at 1.0. The sweep uses nine lengths, three evaluation seeds, 12 tasks per cell, and 10 rollouts per task.
 
 ```bash
 # Collect learner-induced assertion pools
 for seed in 1 2; do
   python scripts/run_exp2_pool.py \
     --llm anthropic:claude-haiku-4-5-20251001 \
-    --persona p8_q2s1 --n-train 32 --seed "$seed" --tag _v1
+    --persona q2_memory_scale --n-train 32 --seed "$seed" --tag _v1
 done
 
 # Run the R-arm length sweep
@@ -140,7 +151,7 @@ for seed in 1 2 3; do
   for length in 0 1 2 3 5 10 20 60 150; do
     python scripts/run_exp2_arms.py \
       --llm anthropic:claude-haiku-4-5-20251001 \
-      --persona p8_q2s1 --arms R --l-values "$length" \
+      --persona q2_memory_scale --arms R --l-values "$length" \
       --rollouts 10 --n-eval 12 --pool-seeds 1 2 \
       --seed "$seed" --tag _v1 --cap-distinct 55
   done
@@ -160,39 +171,39 @@ The main ACE trajectory uses three seeds, 24 training episodes, checkpoints at 0
 for seed in 0 1 2; do
   python scripts/run_q3_evolve.py \
     --llm anthropic:claude-haiku-4-5-20251001 \
-    --persona p13_mixed --agent fc --arms selfevolve_ace \
+    --persona q3_self_evolution --agent fc --arms selfevolve_ace \
     --n-train 24 --checkpoints 0 6 12 18 24 \
     --n-eval 6 --rollouts 3 --max-steps 50 --max-bullets 12 \
-    --seed "$seed" --tag _p13
+    --seed "$seed" --tag _main
 done
 
 # Static references and diagnostic arms
 python scripts/run_q3_evolve.py \
   --llm anthropic:claude-haiku-4-5-20251001 \
-  --persona p13_mixed --agent fc --arms none oracle \
+  --persona q3_self_evolution --agent fc --arms none oracle \
   --n-train 0 --checkpoints 0 --n-eval 6 --rollouts 3 \
-  --max-steps 50 --seed 0 --tag _p13
+  --max-steps 50 --seed 0 --tag _main
 
 python scripts/run_q3_evolve.py \
   --llm anthropic:claude-haiku-4-5-20251001 \
-  --persona p13_mixed --agent fc --arms selfevolve_rewrite \
+  --persona q3_self_evolution --agent fc --arms selfevolve_rewrite \
   --n-train 24 --checkpoints 0 6 12 18 24 \
-  --n-eval 6 --rollouts 3 --max-steps 50 --seed 0 --tag _p13
+  --n-eval 6 --rollouts 3 --max-steps 50 --seed 0 --tag _main
 
 python scripts/run_q3_evolve.py \
   --llm anthropic:claude-haiku-4-5-20251001 \
-  --persona p13_mixed --agent fc --arms external_corrective \
+  --persona q3_self_evolution --agent fc --arms external_corrective \
   --feedback-tier corrective --n-train 24 --checkpoints 0 6 12 18 24 \
-  --n-eval 6 --rollouts 3 --max-steps 50 --seed 0 --tag _p13
+  --n-eval 6 --rollouts 3 --max-steps 50 --seed 0 --tag _main
 
 # Reflexion, TEPA, and TRACE baselines
 for seed in 0 1 2; do
   python scripts/run_q3_evolve.py \
     --llm anthropic:claude-haiku-4-5-20251001 \
-    --persona p13_mixed --agent fc --arms reflexion tepa trace \
+    --persona q3_self_evolution --agent fc --arms reflexion tepa trace \
     --n-train 24 --checkpoints 0 6 12 18 24 \
     --n-eval 6 --rollouts 3 --max-steps 50 \
-    --seed "$seed" --tag _p13bl
+    --seed "$seed" --tag _baselines
 done
 
 python scripts/compare_q3_arms.py

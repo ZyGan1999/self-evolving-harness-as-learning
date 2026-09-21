@@ -98,7 +98,7 @@ def _arm_is_complete(run_name: str, arm: str, args: argparse.Namespace) -> bool:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--llm", required=True)
-    parser.add_argument("--persona", default="p4_q1")
+    parser.add_argument("--persona", default="q1_format_checksum")
     parser.add_argument("--agent", default="fc", choices=["react", "fc", "oracle"],
                         help="fc = constrained function-call actuator; oracle = official solution")
     parser.add_argument("--arms", nargs="+", choices=sorted(STATIC_ARMS | STREAM_ARMS),

@@ -105,7 +105,7 @@ def _is_complete(run_name, arm, args) -> bool:
 def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--llm", required=True)
-    p.add_argument("--persona", default="p13_mixed")
+    p.add_argument("--persona", default="q3_self_evolution")
     p.add_argument("--agent", default="fc", choices=["react", "fc", "oracle"])
     p.add_argument("--arms", nargs="+", default=["selfevolve_ace"], choices=sorted(EVOLVING_ARMS | {"none", "oracle"}))
     p.add_argument("--n-train", type=int, default=24)

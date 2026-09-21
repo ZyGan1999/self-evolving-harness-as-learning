@@ -1,4 +1,4 @@
-name: p5_q1b
+name: q1_signoff_running_total
 description: 'Q1 crossover persona: SMS sign-off and per-recipient running spend total.'
 rules:
 - sms_signoff

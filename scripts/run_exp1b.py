@@ -74,7 +74,7 @@ def summarize(run_name: str) -> dict:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--llm", required=True)
-    parser.add_argument("--persona", default="p3_fc")
+    parser.add_argument("--persona", default="q1_habitual_card")
     parser.add_argument("--agent", default="fc", choices=["fc", "react"],
                         help="react = the actuator-flip control slice")
     parser.add_argument("--arms", nargs="+", default=list(ARMS))

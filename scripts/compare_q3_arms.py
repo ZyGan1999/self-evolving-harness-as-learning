@@ -13,7 +13,7 @@ sys.path.insert(0, str(HERE.parent))
 from appworld_p.config import OUTPUTS_DIR  # noqa: E402
 
 MODEL = "claude-haiku-4-5-20251001"
-PERSONA = "p13_mixed"
+PERSONA = "q3_self_evolution"
 SEEDS = (0, 1, 2)
 NS = [0, 6, 12, 18, 24]
 
@@ -23,14 +23,14 @@ RULES = ("sms_greeting", "sms_signoff", "payment_note_category",
 
 
 ARMS = {
-    "ACE": f"q3_p13_{MODEL}_{PERSONA}_s{{s}}_selfevolve_ace",
-    "TEPA": f"q3_p13bl_{MODEL}_{PERSONA}_s{{s}}_tepa",
-    "TRACE": f"q3_p13bl_{MODEL}_{PERSONA}_s{{s}}_trace",
-    "Reflexion": f"q3_p13bl_{MODEL}_{PERSONA}_s{{s}}_reflexion",
+    "ACE": f"q3_main_{MODEL}_{PERSONA}_s{{s}}_selfevolve_ace",
+    "TEPA": f"q3_baselines_{MODEL}_{PERSONA}_s{{s}}_tepa",
+    "TRACE": f"q3_baselines_{MODEL}_{PERSONA}_s{{s}}_trace",
+    "Reflexion": f"q3_baselines_{MODEL}_{PERSONA}_s{{s}}_reflexion",
 }
 
-REFS = {"none": f"q3_p13_{MODEL}_{PERSONA}_s0_none",
-        "oracle": f"q3_p13_{MODEL}_{PERSONA}_s0_oracle"}
+REFS = {"none": f"q3_main_{MODEL}_{PERSONA}_s0_none",
+        "oracle": f"q3_main_{MODEL}_{PERSONA}_s0_oracle"}
 
 
 def counts(dirname: str) -> dict[int, list[int]] | None:
@@ -69,7 +69,7 @@ def collect() -> dict:
             out["refs"][label] = {"applicable": a, "violated": v, "rate": v / a}
     for label, arm in [("Full rewrite", "selfevolve_rewrite"),
                        ("Corrective", "external_corrective")]:
-        c = counts(f"q3_p13_{MODEL}_{PERSONA}_s0_{arm}")
+        c = counts(f"q3_main_{MODEL}_{PERSONA}_s0_{arm}")
         if c:
             n = max(c)
             a, v = c[n]

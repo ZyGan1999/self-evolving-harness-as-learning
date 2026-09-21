@@ -1,4 +1,4 @@
-name: p8_q2s1
+name: q2_memory_scale
 description: Eight phone, Venmo, and Spotify preferences for the Q2 memory-length
   sweep.
 rules:

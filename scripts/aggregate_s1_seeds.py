@@ -8,7 +8,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from appworld_p.config import OUTPUTS_DIR  # noqa: E402
 
-RUN = "exp2arms_v1_claude-haiku-4-5-20251001_p8_q2s1_R_L{L}_s{s}"
+RUN = "exp2arms_v1_claude-haiku-4-5-20251001_q2_memory_scale_R_L{L}_s{s}"
 RULES = ["sms_signoff", "sms_greeting", "playlist_over_like", "venmo_private",
          "payment_note_single_word", "payment_note_lowercase",
          "payment_has_note", "sms_terse"]

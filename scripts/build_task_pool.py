@@ -1,6 +1,6 @@
 """Build task_pool.json from train+dev metadata.
 
-Use frozen task lists for the Q1 crossover and Q3 experiments. Other personas
+Use frozen task lists for the reported Q1--Q3 experiments. Other personas
 use difficulty filtering and greedy coverage of rule-triggering APIs.
 
 Usage: conda run -n appworld-p python scripts/build_task_pool.py [--min-cover 5] [--eval-size 25]
@@ -20,8 +20,10 @@ from appworld_p.persona import Persona  # noqa: E402
 
 
 FROZEN_SPLITS = {
-    "p5_q1b": PERSONA_DIR.parent / "experiments/q1_running_total.json",
-    "p13_mixed": PERSONA_DIR.parent / "experiments/q3_task_split.json",
+    "q1_format_checksum": PERSONA_DIR.parent / "experiments/q1_format_checksum_split.json",
+    "q2_memory_scale": PERSONA_DIR.parent / "experiments/q2_memory_scale_split.json",
+    "q1_signoff_running_total": PERSONA_DIR.parent / "experiments/q1_running_total.json",
+    "q3_self_evolution": PERSONA_DIR.parent / "experiments/q3_task_split.json",
 }
 
 
@@ -38,7 +40,7 @@ def frozen_pool(persona: Persona, eligible: list[dict]) -> dict:
             f"Frozen tasks for {persona.name} are missing or ineligible: {missing}. "
             "Check AppWorld metadata and --max-difficulty (reported Q3 uses 3)."
         )
-    if persona.name == "p13_mixed":
+    if persona.name == "q3_self_evolution":
         eval_families = {task.split("_")[0] for task in eval_ids}
         stream_families = {task.split("_")[0] for task in stream_ids}
         if eval_families & stream_families:

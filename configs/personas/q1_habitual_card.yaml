@@ -1,4 +1,4 @@
-name: p3_fc
+name: q1_habitual_card
 description: Persona used by the Q1 habitual-card runner and its preference checks.
 rules:
 - venmo_private

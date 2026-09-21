@@ -18,7 +18,7 @@ from appworld_p.summarize import AssertionCollector  # noqa: E402
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--llm", required=True)
-    parser.add_argument("--persona", default="p8_q2s1")
+    parser.add_argument("--persona", default="q2_memory_scale")
     parser.add_argument("--max-steps", type=int, default=50)
     parser.add_argument("--agent", default="fc", choices=["fc", "react"])
     parser.add_argument("--n-train", type=int, default=32)

@@ -1,4 +1,4 @@
-name: p4_q1
+name: q1_format_checksum
 description: Q1 private-note-format and SMS character-checksum preferences.
 rules:
 - private_note_format
