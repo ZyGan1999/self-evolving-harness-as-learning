@@ -94,8 +94,7 @@ preferences that explicitly score attempted actions.
 
 The frozen crossover protocol is in `configs/experiments/q1_running_total.json`:
 three seeds, six evaluation tasks, six training episodes for the learned arm,
-checkpoints 0/3/6, and a 60-step budget. The SMS sign-off preference is retained
-alongside running totals to preserve the original persona and feedback conditions.
+checkpoints 0/3/6, and a 60-step budget. The persona contains SMS sign-off and running-total preferences.
 
 The five reported Q1 preference panels come from three experimental configurations.
 
@@ -138,7 +137,7 @@ rotations, sum violations and applicable counts before taking the ratio.
 
 ## Q2: memory length
 
-The R arm requires only the target assertion pools; no donor collection is needed.
+The R arm uses the learner-generated assertion pools.
 The six-rule diagnostic re-scores the same episodes, excluding SMS terseness and
 payment-note presence. The reported Q2 result uses the `q2_memory_scale` R arm. Every injected statement concerns a scored preference, keeping relevance fixed at 1.0. The sweep uses nine lengths, three evaluation seeds, 12 tasks per cell, and 10 rollouts per task.
 

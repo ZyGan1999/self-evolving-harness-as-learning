@@ -1,12 +1,4 @@
 """Learner-side induction: turn an instance-tier complaint into a general preference.
-
-This is the step that makes memory imperfect. The learner sees one complaint about one
-episode and has to guess what the standing preference is -- in particular its SCOPE, which
-the complaint never states. "sms not signed with first name: 'Hi Alice, the package
-arrived!'" is consistent with "sign every text", "sign texts to Alice", "sign texts about
-deliveries", and the learner has no way to tell from a single case. That guess is the noise
-the L-sweep is about, and it is generated, not authored: nothing here reads oracle_text,
-negation_text, correction_template, or even the rule's name.
 """
 
 import json

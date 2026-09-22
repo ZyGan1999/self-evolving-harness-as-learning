@@ -77,18 +77,16 @@ def main() -> None:
     parser.add_argument("--llm", required=True)
     parser.add_argument("--persona", default="q1_habitual_card")
     parser.add_argument("--agent", default="fc", choices=["fc", "react"],
-                        help="react = the actuator-flip control slice")
+                        help="Agent execution interface.")
     parser.add_argument("--arms", nargs="+", default=list(ARMS))
     parser.add_argument("--schedule", nargs="+", type=int, default=[0, 20, 60, 120],
                         help="cumulative habit observations to evaluate at")
     parser.add_argument("--dominant", default=FAMILY_B_OPTIONS[0], choices=FAMILY_B_OPTIONS,
-                        help="bank carrying most of pi_u (rotate = brand-prior control)")
+                        help="Card brand with the highest probability in the latent preference distribution.")
     parser.add_argument("--attempts", type=int, default=3,
-                        help="gate arm only: retries per episode. Elimination over the world's "
-                             "4-5 cards is not guaranteed at 3, but the ceiling is reported "
-                             "alongside the measurement (scripts/gate_elimination_ceiling.py)")
+                        help="Maximum attempts per episode for the gate arm.")
     parser.add_argument("--tier", default="binary", choices=["binary", "corrective"],
-                        help="feedback information q: binary = out regime")
+                        help="Feedback format for synthetic habit observations.")
     parser.add_argument("--noisy", action="store_true",
                         help="dilute the log with unrelated interactions")
     parser.add_argument("--noise-density", type=float, default=1.0,

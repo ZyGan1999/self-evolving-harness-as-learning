@@ -1,8 +1,4 @@
-"""Minimal LLM clients over raw HTTP (httpx).
-
-We deliberately avoid the anthropic/openai SDKs: appworld pins pydantic 1.x and the
-current SDKs require pydantic 2.x. httpx is already an appworld dependency.
-"""
+"""Minimal LLM clients over raw HTTP (httpx)."""
 
 import os
 import time
@@ -20,11 +16,7 @@ _announced: set[str] = set()
 
 
 def _announce(spec: str, endpoint, api_key: str) -> None:
-    """One line per (spec, endpoint) pair, the first time that pair is constructed.
-
-    Deduplicated because a sweep builds one client per cell and per pool run, and the point is to
-    make the resolved endpoint auditable in a log, not to print it 30 times.
-    """
+    """Log each resolved client configuration once."""
     line = f"[llm] {spec} -> {endpoint}  key=…{api_key[-4:] if api_key else 'NONE'}"
     if line not in _announced:
         _announced.add(line)
@@ -78,7 +70,7 @@ class BaseLLM:
 
 class AnthropicLLM(BaseLLM):
     """Anthropic Messages API — works with the official endpoint or any
-    Anthropic-compatible relay via ANTHROPIC_BASE_URL (e.g. https://www.packyapi.com)."""
+    Anthropic-compatible relay via ANTHROPIC_BASE_URL."""
 
     def __init__(self, model: str = "claude-sonnet-5", api_key: str | None = None,
                  base_url: str | None = None):

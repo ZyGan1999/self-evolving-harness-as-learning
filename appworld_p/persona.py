@@ -36,8 +36,7 @@ class Persona:
         return [rule.name for rule in self.rules if rule.trigger_apis() & required_apis]
 
     def oracle_context(self, verbosity: int = 1) -> str:
-        """Perfect natural-language description of all rules (oracle-c).
-        verbosity 1/4/16 repeats-with-elaboration for the length-sweep control."""
+        """Render oracle preference statements with optional repetition."""
         lines = ["My preferences for how you should do things:"]
         for i, rule in enumerate(self.rules, 1):
             lines.append(f"{i}. {rule.oracle_text}")

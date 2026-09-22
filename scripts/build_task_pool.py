@@ -1,9 +1,8 @@
-"""Build task_pool.json from train+dev metadata.
+"""Build task_pool.json from train and development metadata.
 
 Use frozen task lists for the reported Q1--Q3 experiments. Other personas
 use difficulty filtering and greedy coverage of rule-triggering APIs.
-
-Usage: conda run -n appworld-p python scripts/build_task_pool.py [--min-cover 5] [--eval-size 25]
+See README.md for the reported configuration.
 """
 
 import argparse

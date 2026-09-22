@@ -14,11 +14,9 @@ TOTAL_TAG = re.compile(r"total:\s*\$?[0-9]+(?:\.[0-9]{1,2})?\s*$", re.I)
 
 @dataclass
 class SpendTotalAutofill:
-    """Maintains a per-recipient running total and repairs the memo tag on the way through.
+    """Maintain running payment totals and update the description suffix.
 
-    `baseline` maps a recipient key to what the world says was already sent to them before this
-    episode -- the same ground truth the rule scores against (driver.read_spend_totals), not a
-    re-derivation, so the harness cannot be right for a reason the rule disagrees with.
+    The baseline contains pre-episode totals from driver.read_spend_totals.
     """
 
     baseline: dict[str, float]
@@ -35,11 +33,9 @@ class SpendTotalAutofill:
         return ""
 
     def apply(self, canonical: str) -> tuple[str, dict | None]:
-        """-> (possibly rewritten call, repair record or None).
+        """Return the rewritten call and an optional repair record.
 
-        Anything that is not a venmo payment passes through untouched. A malformed call is also
-        passed through: the actuator's own validator owns that error, and swallowing it here
-        would hide a protocol failure behind a preference fix.
+        Non-payment calls and calls that cannot be parsed are returned unchanged.
         """
         try:
             call = ast.parse(canonical.strip()).body[0].value  # type: ignore[attr-defined]

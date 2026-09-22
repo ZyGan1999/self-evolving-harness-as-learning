@@ -70,12 +70,7 @@ def arm_config(arm: str, run_name: str, persona_path: str, pool: dict,
 
 
 def _arm_is_complete(run_name: str, arm: str, args: argparse.Namespace) -> bool:
-    """Does this arm already have every eval episode it is supposed to have?
-
-    Counts eval episodes per checkpoint rather than lines in the file: a run killed by a
-    relay outage leaves a partial episodes.jsonl, and treating that as done would silently
-    report a half-finished arm as a result.
-    """
+    """Check evaluation episode counts at every expected checkpoint."""
     path = OUTPUTS_DIR / "sessions" / run_name / "episodes.jsonl"
     if not path.exists():
         return False
@@ -109,8 +104,7 @@ def main() -> None:
     parser.add_argument("--distractors", type=int, default=6)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--skip-done", action="store_true",
-                        help="skip arms whose eval episodes are already all on disk, so a "
-                             "sweep killed by a relay outage can be resumed cheaply")
+                        help="Skip arms with all expected evaluation episodes already saved.")
     parser.add_argument("--tag", default="")
     args = parser.parse_args()
 

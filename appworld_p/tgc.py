@@ -111,11 +111,9 @@ def _values_from_trace(trace: str) -> tuple[object, object] | None:
 
 
 def _contains(actual: object, expected: object) -> tuple[bool, str]:
-    """Is `expected` still present in `actual` as written? -> (ok, reason-if-not).
+    """Check whether expected text occurs in each actual string.
 
-    Rejects anything that is not a plain non-empty string comparison, which is what keeps
-    amount/id/count assertions out: those never satisfy string containment, and treating
-    them as excusable would relax assertions no preference ever touches.
+    Returns (ok, reason_if_not); rejects empty expected text and non-string values.
     """
     if not isinstance(expected, str) or not expected.strip():
         return False, f"expected is not a non-empty string ({type(expected).__name__})"
@@ -216,11 +214,7 @@ def adjudicate(evaluation: dict, rule_names) -> Verdict:
 
 
 def assert_monotonic(verdicts) -> None:
-    """Relaxed TGC is a strict relaxation of official, so it may never be lower.
-
-    Cheap invariant worth keeping live: any violation means the adjudicator turned a passing
-    episode into a failing one, which it has no mechanism to do legitimately.
-    """
+    """Assert that the relaxed score is no lower than the official score."""
     bad = [v for v in verdicts if v.official and not v.relaxed]
     if bad:
         raise AssertionError(

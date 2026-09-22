@@ -60,7 +60,7 @@ class HabitRound:
     accepted: bool
 
     def render(self, tier: str) -> str:
-        """One structured log line — the legitimate channel, identical for all arms."""
+        """Render one habit observation using the selected feedback format."""
         if tier == "corrective":
             return (f"interaction {self.index:02d} | venmo card payment | "
                     f"paid with {self.used} card | "
@@ -110,14 +110,10 @@ class HabitStream:
         return Counter(r.wanted for r in self.rounds)
 
     def target(self) -> str:
-        """f*_u: the habit itself = argmax pi_u (Q1_REDESIGN 2.3). Fixed, not sample
-        dependent — the preference exists before the log does; every harness has to
-        infer it from the stream. Driver-side ground truth, never a harness input."""
         return max(self.pi_u, key=lambda o: (self.pi_u[o], o))
 
     def empirical_mode(self) -> str | None:
-        """Mode of the emitted log — diagnostic only (how identifiable is the target
-        at this n?), never the checker's target."""
+        """Mode of sampled latent preferences; diagnostic only."""
         counts = self.wanted_counts()
         if not counts:
             return None
@@ -125,7 +121,7 @@ class HabitStream:
         return sorted(o for o, c in counts.items() if c == top)[0]
 
     def render_log(self) -> str:
-        """Full structured log — the information upper bound of the context class."""
+        """Render the full observation log."""
         if not self.rounds:
             return ""
         lines = []
@@ -137,7 +133,7 @@ class HabitStream:
 
     def acceptance_rates(self) -> dict[str, tuple[int, int]]:
         """Per-option (accepts, uses) — computable from the log by a counter, in both
-        tiers. This is the credit-assignment statistic f fails to do in-context."""
+        tiers. """
         uses, accepts = Counter(), Counter()
         for r in self.rounds:
             uses[r.used] += 1
@@ -146,8 +142,7 @@ class HabitStream:
         return {o: (accepts[o], uses[o]) for o in self._options}
 
     def counter_argmax(self) -> str | None:
-        """What the external counter concludes. Under uniform exploration the per-option
-        acceptance rate estimates pi_u(option), so its argmax recovers the habit."""
+        """Estimate the habitual card from empirical acceptance rates."""
         rates = self.acceptance_rates()
         scored = [(a / u, o) for o, (a, u) in rates.items() if u]
         if not scored:

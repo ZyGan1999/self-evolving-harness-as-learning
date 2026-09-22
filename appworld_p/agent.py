@@ -62,9 +62,7 @@ XML_CODE_RE = re.compile(r'<parameter name="code">\s*(.*?)\s*</parameter>', re.D
 
 
 def extract_code(text: str) -> str:
-    """Take the FIRST fenced block: in the one-block-per-turn protocol the first
-    block is this turn's action — anything after it is a hallucinated rollout
-    (models sometimes fabricate execution outputs and further steps)."""
+    """Extract the first fenced code block, ignoring subsequent blocks."""
     blocks = CODE_RE.findall(text)
     if blocks:
         return blocks[0].strip()
@@ -181,8 +179,7 @@ _JSONISH = {"true": True, "false": False, "null": None}
 
 
 class _JsonLiteralFixer(ast.NodeTransformer):
-    """Models habitually write JSON booleans (private=true); canonicalize them —
-    they are still literals, just in the wrong dialect."""
+    """Convert JSON literals to their Python equivalents."""
 
     def visit_Name(self, node: ast.Name):
         if node.id in _JSONISH:

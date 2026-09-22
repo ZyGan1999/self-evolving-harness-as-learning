@@ -19,12 +19,7 @@ class Feedback:
 
 
 def _complaint(result: RuleResult) -> str:
-    """Instance-tier complaint for one violation, built only from the checker's detail.
-
-    The detail strings are already instance-bound ("note lacks initials suffix: 'dinner'"),
-    so the wrapper just makes them sound like a user rather than a linter. Rules whose
-    detail is empty degrade to a bare complaint, which is the honest weaker signal.
-    """
+    """Build a complaint from the checker's detail, with a generic fallback if empty."""
     if not result.detail:
         return "something about how you did this isn't right."
     return f"{result.detail} -- I don't want it done that way."
@@ -65,13 +60,7 @@ _ASPECT = {
 
 
 def _aspects(violated: list[RuleResult], rules_by_name: dict | None) -> list[str]:
-    """Aspect phrases for the violated rules, deduplicated, in first-appearance order.
-
-    Unlike _scopes this does NOT collapse to one phrase per artefact: naming two aspects of the
-    same message is the point of this tier. What it still withholds is the TARGET -- "how you
-    ended that text message" says the ending is wrong without saying it should carry a first name,
-    so the learner has a hypothesis space to search instead of a value to copy.
-    """
+    """Return distinct affected-aspect phrases in first-appearance order, without target values."""
     seen, out = set(), []
     for r in violated:
         rule = (rules_by_name or {}).get(r.rule)

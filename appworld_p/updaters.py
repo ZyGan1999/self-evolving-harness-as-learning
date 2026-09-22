@@ -122,7 +122,7 @@ Rewrite the memory file to better capture this user's preferences. Keep it conci
 
 
 class SelfEvolveUpdater(BaseUpdater):
-    """f reflects on the transcript and rewrites memory (community-standard recipe)."""
+    """f reflects on the transcript and rewrites memory."""
 
     def __init__(self, llm: BaseLLM, max_memory_chars: int = 4000):
         self.llm = llm

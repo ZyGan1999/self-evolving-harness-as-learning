@@ -66,11 +66,9 @@ print([round(sum(float(t['amount']) for t in _sent), 2), len(_sent), _per])
 
 
 def read_spend_totals(world) -> dict:
-    """Venmo money the supervisor has already sent, before the agent acts.
+    """Read the initial outgoing-payment totals for checking and autofill.
 
-    -> {"total": float, "count": int, "per_recipient": {email: float}}. Read-only and
-    checker-side: the agent never sees this, it has to derive the same figure through the
-    same paginated API the lookup uses.
+    Returns total, count, and per-recipient amounts.
     """
     import ast
     try:
@@ -365,12 +363,11 @@ class SessionDriver:
 
     def _linter_report(self, violations: list, ep=None) -> str:
         """Checker output fed into the next attempt. With verifier_detail the checker's
-        computed expectation goes back too, which is what separates detecting a violation
-        from supplying a computation the model cannot perform."""
+        computed expectation goes back too."""
         return REJECT_HEADER + "\n".join(f"- {ln}" for ln in self._report_lines(violations, ep))
 
     def _first_card_bank(self, ep: EpisodeRecord) -> str | None:
-        """Bank of the first card the episode tried (family-B choice distribution)."""
+        """Bank of the first payment card attempted in the episode."""
         from .rules.api_map import find_actions
         for call in find_actions(ep, "venmo_payment"):
             card = call.arg("payment_card_id", "card_id")

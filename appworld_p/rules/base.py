@@ -1,11 +1,9 @@
 """Preference rule framework.
 
 A Rule is the unit of f*_u: (hidden semantics, programmatic checker, applicability
-predicate). Rules never leak their semantics to the agent; `oracle_text` is used
-only for oracle-c calibration and corrective feedback templates.
+predicate).
 
-Checkers read EpisodeRecord (resolved api_calls) + SessionHistory. Field claims
-prevent composing personas whose rules constrain the same text field incompatibly.
+Checkers read EpisodeRecord (resolved api_calls) + SessionHistory. Duplicate field-claim keys are rejected when constructing a persona.
 """
 
 import re
@@ -42,18 +40,7 @@ class Rule:
                 for a in self.trigger_actions for api in ACTIONS[a].api_candidates}
 
     def gate_detail(self, ep: EpisodeRecord, history: SessionHistory) -> str:
-        """Rejection text for a NON-LEAKING gate. Default: nothing beyond the template.
-
-        `detail` exists to feed the agent the checker's computed expectation, which for some
-        rules means naming the answer -- fine for the returns-value arm, fatal for a
-        reject-only arm, where the cell would then measure how fast f can copy a leaked label.
-        This hook is the reject-only channel: it may describe what the attempt DID (the agent's
-        own action, which carries no new information) but never what it should have done.
-
-        Subclasses that override it must keep that invariant. It is checked by
-        tests/test_gate_detail_nonleaking.py, which asserts the target never appears in the
-        string.
-        """
+        """Return rejection details without revealing the computed target value."""
         return ""
 
     def applicable(self, ep: EpisodeRecord) -> bool:
@@ -61,14 +48,6 @@ class Rule:
 
     def satisfied(self, ep: EpisodeRecord, history: SessionHistory) -> tuple[bool, str]:
         """Only called when applicable. Returns (ok, detail).
-
-        `detail` is not just a log line: the verifier_value arm feeds it back to the agent as
-        the checker's computed expectation. Returning at the first bad action is fine when the
-        expectation is per-action (a checksum over one message, a code derived from one
-        amount) -- one worked example generalises. It is NOT fine when each action has a
-        DIFFERENT expected value, as with a running total: there the detail must name every
-        offending action, or the gate can only ever fix one of them per attempt. See
-        _SpendRunningTotal.satisfied.
         """
         raise NotImplementedError
 

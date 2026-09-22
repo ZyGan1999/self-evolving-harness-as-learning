@@ -55,8 +55,7 @@ class PrivateNoteFormat(Rule):
 
 @register
 class RecentModeCard(Rule):
-    """Sliding-window frequency: assertions go stale; an external counter never does.
-    Grounded on venmo card payments (amazon is test_challenge-only in AppWorld)."""
+    """Require the most frequently used card in the recent payment window."""
     name = "recent_mode_card"
     pool = "B"
     apps = ("venmo",)
@@ -84,16 +83,9 @@ class RecentModeCard(Rule):
 
 @register
 class UsualCard(Rule):
-    """Family B (statistical aggregation): the user habitually pays with one bank's card.
+    """Check the habitual payment card against the mode of the latent preference distribution.
 
-    The habit is a biased-random distribution pi_u over interchangeable cards; the target
-    is argmax pi_u, observable only as a statistic of the interaction stream. Under the
-    binary feedback tier (log says which card was used + happy/unhappy, never which card
-    was wanted) recovering it requires per-card acceptance-rate credit assignment — which
-    f does not do inside a forward pass, but a 20-line external counter does.
-
-    Metric = the FIRST card the episode attempts (intent). Later attempts are confounded:
-    a card can fail for insufficient balance and force a fallback.
+    Score the first attempted card; later attempts may follow insufficient-balance failures.
     """
     name = "usual_card"
     pool = "B"
@@ -114,14 +106,9 @@ class UsualCard(Rule):
         return bool(ep.card_names) or not used_card
 
     def gate_detail(self, ep, history: SessionHistory) -> str:
-        """Reject-only channel: name what the attempt used, never what it should have used.
+        """Report the rejected card without revealing the target card.
 
-        Retries run in a fresh world with fresh context, so without this the agent cannot tell
-        which cards it has already been rejected for and may re-offer the same one -- the gate
-        would then measure its luck on attempt 1, not the mechanism. Naming the card the agent
-        itself just used adds no information about the target, so the exclusion is admissible
-        where `satisfied`'s detail ("habitual card is X") is not. The driver accumulates these
-        across attempts, so attempt 3 sees both earlier exclusions.
+        The driver accumulates these reports across fresh-world attempts.
         """
         for call in find_actions(ep, "venmo_payment"):
             card = call.arg("payment_card_id", "card_id")
@@ -152,7 +139,7 @@ class UsualCard(Rule):
 
 @register
 class TxnRunningCount(Rule):
-    """Cross-session exact count: context cannot track it, an external counter can."""
+    """Check the running payment count in the description suffix."""
     name = "txn_running_count"
     pool = "B"
     apps = ("venmo",)
@@ -266,7 +253,6 @@ class SmsCharChecksum(Rule):
 
 @register
 class NoteExactWords(Rule):
-    """Generation-hard, verification-easy: exact word count."""
     name = "note_exact_words"
     pool = "B"
     apps = ("simple_note",)
@@ -289,7 +275,6 @@ class NoteExactWords(Rule):
 
 @register
 class LipogramEmailClose(Rule):
-    """Generation-hard, verification-easy: final body line avoids the letter 'e'."""
     name = "lipogram_email_close"
     pool = "B"
     apps = ("gmail",)
@@ -374,7 +359,7 @@ class _SpendRunningTotal(Rule):
 
 @register
 class SpendTotalPerRecipient(_SpendRunningTotal):
-    """Easier rung: sum only what was already sent to THIS recipient (7-14 payments)."""
+    """Check cumulative successful payments to the same recipient, including the current payment."""
     name = "spend_total_per_recipient"
     oracle_text = ("When you send someone money on Venmo for me, end the payment note with "
                    "'total: $X', where X is the running total I have ever sent that same "

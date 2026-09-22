@@ -31,7 +31,7 @@ def _recycle(lines: list[str], k: int) -> list[str]:
 def build_arm_memory(arm: str, scored: list, d: int, L: int,
                      pick: str = "consensus", seed: int = 0,
                      shuffle: bool = True, cap_distinct: int | None = 55) -> tuple[str, dict]:
-    """Construct the reported R arm without a donor pool."""
+    """Construct the relevant-memory block for the Q2 R arm."""
     if arm != "R":
         raise ValueError(f"Unknown reported Q2 arm: {arm!r}")
     if L < 0:

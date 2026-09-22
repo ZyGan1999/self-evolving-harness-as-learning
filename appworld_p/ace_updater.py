@@ -1,9 +1,4 @@
 """ACE-style updater: itemized bullets with delta updates and deduplication.
-
-Implements the ACE (arXiv:2510.04618) recipe: memory as structured bullets (id + helpful/harmful
-counters + text), delta updates (LLM proposes add/modify, not rewrite-all), deterministic merge
-(code does the merge, not LLM), semantic deduplication (embed & threshold), and fixed capacity
-(prune when L exceeded).
 """
 
 import hashlib
@@ -41,7 +36,7 @@ Rules:
 
 @dataclass
 class Bullet:
-    """One memory line plus metadata ACE uses for prune/dedup."""
+    """A memory bullet with its identifier and metadata."""
     id: str
     text: str
     helpful: int = 0
@@ -56,7 +51,7 @@ def render_bullets(bullets: list[Bullet]) -> str:
 
 
 def parse_bullets(text: str) -> list[Bullet]:
-    """Parse bullets from injected memory (for resuming a session or testing round-trip)."""
+    """Parse bullet identifiers and text from rendered memory."""
     bullets = []
     for line in text.splitlines():
         m = re.match(r"^-\s*\[([a-f0-9]{6})\]\s*(.+)", line.strip())
@@ -102,7 +97,7 @@ def _extract_json_array(text: str):
 
 
 class ACEStyleUpdater(BaseUpdater):
-    """ACE recipe: itemized bullets, delta updates, dedup, fixed L."""
+    """ACE-style updater with delta updates, deduplication, and bounded memory."""
 
     def __init__(self, llm: BaseLLM, max_bullets: int = 12):
         self.llm = llm
@@ -186,8 +181,7 @@ class ACEStyleUpdater(BaseUpdater):
         return render_bullets(self.bullets)
 
     def state(self) -> dict:
-        """Carried into every train row by driver.py, so the length and order of the block are
-        recorded alongside the violation rate rather than reconstructed afterwards."""
+        """Return memory size, update diagnostics, and a bullet-order fingerprint."""
         text = render_bullets(self.bullets)
         return {"bullets": len(self.bullets), "memory_chars": len(text),
                 "memory_lines": len(text.splitlines()) if self.bullets else 0,

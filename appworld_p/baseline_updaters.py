@@ -26,11 +26,7 @@ _AUTH_APIS = ("login", "logout", "signup", "show_account_passwords", "show_profi
 
 
 def _safe_args(arguments: dict) -> dict:
-    """Replace credential VALUES with a placeholder, keeping the argument names visible.
-
-    Names are kept because 'the agent passed an access_token' is legitimate trajectory structure;
-    it is the 200-character bearer token that reads as exfiltration.
-    """
+    """Replace credential values with a placeholder, preserving argument names."""
     out = {}
     for k, v in (arguments or {}).items():
         if any(s in str(k).lower() for s in _SECRET_ARGS):
@@ -41,12 +37,7 @@ def _safe_args(arguments: dict) -> dict:
 
 
 def _actions(ep: EpisodeRecord, limit: int = 40) -> str:
-    """The trajectory summary every recipe here reflects over, in one shared format.
-
-    Auth calls are dropped and credential values redacted -- see _SECRET_ARGS. What survives is
-    the app.api plus the arguments a preference can actually constrain (message bodies, payment
-    notes, privacy flags), which is all any of these recipes needs to induce a preference from.
-    """
+    """Summarize API calls after removing authentication calls and redacting credentials."""
     lines = []
     for c in ep.api_calls:
         if c.api in _AUTH_APIS:
@@ -273,9 +264,7 @@ class TepaUpdater(BaseUpdater):
                              "stored_after": len(self.precedents)})
 
     def render_memory(self) -> str:
-        """Active precedents only. Revoked ones stay in the store and out of the prompt -- that
-        separation IS the mechanism, so rendering them would silently turn this into append-only.
-        """
+        """Render active precedents; keep revoked entries in the archive only."""
         active = [p for p in self.precedents if p.active]
         if not active:
             return ""

@@ -1,4 +1,4 @@
-"""Pool A: in-support candidate rules (style/choice preferences, pretrain-dense concepts).
+"""Style and action-choice preference rules.
 
 Every checker is field-level programmatic (regex/param checks) — no fuzzy judgments.
 """
@@ -282,7 +282,6 @@ class PlaylistOverLike(Rule):
 
 @register
 class FileOverwriteAlways(Rule):
-    """Optional boolean the task never mentions -- the cleanest kind of Q2 attribute slot."""
     name = "file_overwrite_always"
     pool = "A"
     apps = ("file_system",)
@@ -307,8 +306,7 @@ class FileOverwriteAlways(Rule):
 
 @register
 class SmsGreeting(Rule):
-    """Additive PREFIX on the message. The suffix slot is sms_signoff's; the task dictates the
-    body text, so only decoration around it is measurable."""
+    """Require a greeting at the beginning of outgoing text messages."""
     name = "sms_greeting"
     pool = "A"
     apps = ("phone",)
@@ -392,12 +390,7 @@ class FileContentHeader(Rule):
 
 @register
 class PaymentNoteCategoryPrefix(Rule):
-    """Additive PREFIX on the Venmo note, independent of the initials suffix on the same field.
-
-    Two additive constraints can share one text field as long as they occupy opposite ends, so
-    note_prefix and note_suffix are separate claims. Q2 needs the attribute count, and the
-    registry's supply of untouched fields on triggerable actions is exhausted.
-    """
+    """Additive PREFIX on the Venmo note, independent of the initials suffix on the same field."""
     name = "payment_note_category"
     pool = "A"
     apps = ("venmo",)
@@ -422,7 +415,6 @@ class PaymentNoteCategoryPrefix(Rule):
 
 @register
 class PaymentNoteSingleWord(Rule):
-    """Distractor: conflicts with the prefix and suffix the persona wants on the same note."""
     name = "payment_note_single_word"
     pool = "A"
     apps = ("venmo",)
@@ -446,8 +438,6 @@ class PaymentNoteSingleWord(Rule):
 
 @register
 class PaymentNoteNoBrackets(Rule):
-    """Distractor: its positive direction forbids exactly the two decorations the persona asks
-    for ('[personal]' and '(J.D.)')."""
     name = "payment_note_no_brackets"
     pool = "A"
     apps = ("venmo",)
@@ -471,7 +461,6 @@ class PaymentNoteNoBrackets(Rule):
 
 @register
 class SmsTerse(Rule):
-    """Distractor: a five-word cap leaves no room for the persona's greeting plus sign-off."""
     name = "sms_terse"
     pool = "A"
     apps = ("phone",)
@@ -494,7 +483,6 @@ class SmsTerse(Rule):
 
 @register
 class VenmoPublicFeed(Rule):
-    """Distractor: contradicts venmo_private outright."""
     name = "venmo_public_feed"
     pool = "A"
     apps = ("venmo",)
@@ -518,8 +506,6 @@ class VenmoPublicFeed(Rule):
 
 @register
 class SmsNoNames(Rule):
-    """Distractor: its positive direction forbids the recipient name sms_greeting wants AND the
-    supervisor name sms_signoff wants, so one assertion fights two scored rules."""
     name = "sms_no_names"
     pool = "A"
     apps = ("phone",)
@@ -547,7 +533,6 @@ class SmsNoNames(Rule):
 
 @register
 class PaymentNoteLowercase(Rule):
-    """Distractor: all-lowercase leaves no room for the 'J.D.' initials suffix."""
     name = "payment_note_lowercase"
     pool = "A"
     apps = ("venmo",)
@@ -570,7 +555,6 @@ class PaymentNoteLowercase(Rule):
 
 @register
 class SmsNoPunctuation(Rule):
-    """Distractor: forbids the comma in 'Hi Sam,' and the period in the sign-off."""
     name = "sms_no_punctuation"
     pool = "A"
     apps = ("phone",)

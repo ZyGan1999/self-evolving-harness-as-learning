@@ -80,12 +80,7 @@ def arm_config(arm, run_name, persona_path, pool, args):
 
 
 def _is_complete(run_name, arm, args) -> bool:
-    """Does this arm already have every eval episode it should?
-
-    Counts eval episodes per checkpoint rather than lines in the file: a run killed mid-write
-    leaves a partial episodes.jsonl, and treating that as done would report a half-finished arm
-    as a result. Same reasoning as run_exp1._arm_is_complete.
-    """
+    """Check evaluation episode counts at every expected checkpoint."""
     path = OUTPUTS_DIR / "sessions" / run_name / "episodes.jsonl"
     if not path.exists():
         return False
@@ -112,8 +107,7 @@ def main() -> None:
     p.add_argument("--checkpoints", nargs="+", type=int, default=[0, 6, 12, 18, 24])
     p.add_argument("--n-eval", type=int, default=6)
     p.add_argument("--rollouts", type=int, default=3,
-                   help="repeats of each eval task per checkpoint; the eval set is 6 tasks, so "
-                        "this is what makes the per-rule denominator usable")
+                   help="Evaluation rollouts per task at each checkpoint.")
     p.add_argument("--max-steps", type=int, default=50)
 
 
@@ -127,11 +121,7 @@ def main() -> None:
     p.add_argument("--trace-gate-attempts", type=int, default=3)
     p.add_argument("--feedback-tier", default="instance",
                    choices=["instance", "corrective", "default", "vague_scoped", "aspect"],
-                   help="feedback precision, ordered by information content: default (bare "
-                        "dissatisfaction) < vague_scoped (names the artefact) < aspect (names which "
-                        "aspect of it, not the target value) < "
-                        "instance (names the rule via the checker detail) < corrective (hands "
-                        "over the correction template)")
+                   help="Feedback format supplied to the updater.")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--skip-done", action="store_true")
     p.add_argument("--tag", default="")
