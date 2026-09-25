@@ -1,8 +1,6 @@
 # Harness Evolution as Learning
 
-This repository contains the implementation and configurations for the Q1--Q3 experiments in *Harness Evolution as Learning*. It is a source-only release: benchmark data, model transcripts, experiment sessions, aggregated results, and generated figures are not included.
-
-The language model is held fixed within each experiment. We vary only the local personalization harness.
+This repository contains the implementation and configurations for the Q1--Q3 experiments in *Harness Evolution as Learning*. 
 
 ## Experimental scope
 
