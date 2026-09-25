@@ -227,11 +227,3 @@ control conditions: Checker rejects adds verification and retry; Harness compute
 uses external statistics, computed feedback, or action-field rewriting.
 Q3 TRACE retries against its own learned checks, while Q1 Checker rejects uses
 the ground-truth persona checker.
-
-TEPA retains one active precedent per key with revocation history. Its prompt
-specifies the TEPA_KEYS vocabulary and permits other.* keys; recognized key
-variants are mapped back to the vocabulary. TRACE uses the predicate vocabulary
-and literal limits in baseline_updaters.py, with a 12-check capacity and up to
-three attempts. Reflexion retains three reflections; ACE retains at most 12
-bullets. Reflexion, TEPA, and TRACE filter authentication calls and redact
-credential arguments before constructing updater inputs.
